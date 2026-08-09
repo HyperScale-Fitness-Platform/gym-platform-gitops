@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-gateway-ingress
+  annotations:
+    kubernetes.io/ingress.class: alb
+    # "internet-facing" means the ALB gets a public IP/DNS name, reachable from anywhere.
+    alb.ingress.kubernetes.io/scheme: internet-facing
+
+    # "ip" target type means the ALB routes directly to pod IPs
+    # (requires the VPC CNI, which you already have). The alternative,
+    # "instance", routes to EC2 instance ports instead — "ip" is the
+    # more modern, more efficient default for EKS.
+    alb.ingress.kubernetes.io/target-type: ip
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080

@@ -1,0 +1,45 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: auth-db-migrate
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: postgres:16
+          env:
+            - name: PGHOST
+              value: "auth-postgres"
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: auth-svc-credentials
+                  key: POSTGRES_USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: auth-svc-credentials
+                  key: POSTGRES_PASSWORD
+            - name: PGDATABASE
+              value: "gym_auth"
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "Ensuring target database 'gym_auth' exists..."
+              psql -d postgres -c "CREATE DATABASE gym_auth;" 2>/dev/null || echo "Database gym_auth already exists."
+              
+              echo "Applying schema migrations..."
+              psql -d gym_auth -f /migrations/schema.sql
+          volumeMounts:
+            - name: migration-sql
+              mountPath: /migrations
+      volumes:
+        - name: migration-sql
+          configMap:
+            name: auth-db-schema

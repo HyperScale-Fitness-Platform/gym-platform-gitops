@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: auth-postgress
+spec:
+  serviceName: auth-postgres   # must match the headless Service below
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-postgres
+  template:
+    metadata:
+      labels:
+        app: auth-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef: { name: auth-svc-credentials, key: POSTGRES_USER }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: auth-svc-credentials, key: POSTGRES_PASSWORD }
+            - name: POSTGRES_DB 
+              value: "gym_auth"
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+              subPath: postgres
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "$(POSTGRES_USER)"] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec: { command: ["pg_isready", "-U", "$(POSTGRES_USER)"] }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+  # volumeClaimTemplates is THE defining feature of a StatefulSet vs a
+  # Deployment — instead of one shared PVC, Kubernetes automatically
+  # creates a DEDICATED PVC per pod replica, named predictably
+  # (postgres-storage-auth-postgres-0, -1, etc.), and re-attaches the
+  # SAME volume to the SAME pod identity on every restart — a plain
+  # Deployment with a single PVC couldn't give you this guarantee if
+  # you ever scaled beyond 1 replica.
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+        storageClassName: gp3

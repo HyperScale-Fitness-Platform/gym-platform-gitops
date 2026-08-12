@@ -1,0 +1,15 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: gym-platform
+  namespace: argocd
+spec:
+  description: All gym platform microservices
+  sourceRepos:
+    - https://github.com/<your-org>/gym-platform-gitops
+  destinations:
+    - namespace: gym-dev
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'

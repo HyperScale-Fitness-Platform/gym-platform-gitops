@@ -1,0 +1,15 @@
+# A "headless" Service (clusterIP: None) doesn't load-balance — instead
+# it gives each StatefulSet pod its own stable DNS name:
+# auth-postgres-0.auth-postgres.gym-dev.svc.cluster.local
+# This is what StatefulSets require to provide stable network identity.
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-postgres
+spec:
+  clusterIP: None
+  selector:
+    app: auth-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432

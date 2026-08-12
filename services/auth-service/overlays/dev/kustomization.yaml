@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Inherit base manifests
+resources:
+  - ../../base
+
+# Inject target namespace into all resources automatically
+namespace: gym-dev
+
+# Substitute placeholder base image with actual AWS ECR repository path
+images:
+  - name: gym-api-gateway
+    newName: <account-id>.dkr.ecr.<region>.amazonaws.com/gym-api-gateway
+    newTag: dev-latest
+
+# Environment-specific deployment overrides
+patches:
+  - path: patch-deployment.yaml

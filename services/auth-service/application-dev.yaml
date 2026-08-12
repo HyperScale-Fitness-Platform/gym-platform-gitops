@@ -1,21 +1,16 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: gym-platform-root-dev
+  name: auth-service-dev
   namespace: argocd
 spec:
   project: gym-platform
   source:
     repoURL: https://github.com/<your-org>/gym-platform-gitops
     targetRevision: main
-    path: apps
-    directory:
-      recurse: true
-      # NOTE: with kustomize overlays, you actually want ArgoCD's
-      # "App of Apps" to point at per-service Application objects that
-      # each reference their DEV overlay specifically — see below.
+    path: apps/auth-service/overlays/dev
   destination:
     server: https://kubernetes.default.svc
-    namespace: argocd
+    namespace: gym-dev
   syncPolicy:
     automated: { prune: true, selfHeal: true }

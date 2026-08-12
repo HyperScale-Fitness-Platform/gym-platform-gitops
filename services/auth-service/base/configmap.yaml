@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-service-config
+data:
+  PORT: "4000"
+  DB_HOST: "auth-postgres"
+  DB_PORT: "5432"
+  DB_NAME: "gym_auth"
+  SALT_ROUNDS: "10"
+  JWT_EXPIRY: "1h"

@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: auth-service-prod
+  namespace: argocd
+spec:
+  project: gym-platform
+  source:
+    repoURL: https://github.com/<your-org>/gym-platform-gitops
+    targetRevision: main
+    path: apps/auth-service/overlays/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gym-prod
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: false
+      # IMPORTANT DIFFERENCE: prod does NOT self-heal/auto-sync
+      # automatically by default — see explanation below.

@@ -6,7 +6,7 @@ metadata:
 spec:
   description: All gym platform microservices
   sourceRepos:
-    - https://github.com/<your-org>/gym-platform-gitops
+    - https://github.com/HyperScale-Fitness-Platform/gym-platform-gitops.git
   destinations:
     - namespace: gym-dev
       server: https://kubernetes.default.svc

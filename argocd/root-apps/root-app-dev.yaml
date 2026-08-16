@@ -6,9 +6,9 @@ metadata:
 spec:
   project: gym-platform
   source:
-    repoURL: https://github.com/<your-org>/gym-platform-gitops
+    repoURL: https://github.com/HyperScale-Fitness-Platform/gym-platform-gitops.git
     targetRevision: main
-    path: apps
+    path: services
     directory:
       recurse: true
       # NOTE: with kustomize overlays, you actually want ArgoCD's

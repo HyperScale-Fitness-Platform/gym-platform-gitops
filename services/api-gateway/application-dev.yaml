@@ -1,14 +1,14 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: auth-service-dev
+  name: api-gateway-dev
   namespace: argocd
 spec:
   project: gym-platform
   source:
     repoURL: https://github.com/HyperScale-Fitness-Platform/gym-platform-gitops.git
     targetRevision: main
-    path: services/auth-service/overlays/dev
+    path: services/api-gateway/overlays/dev
   destination:
     server: https://kubernetes.default.svc
     namespace: gym-dev

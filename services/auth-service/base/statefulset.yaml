@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: auth-postgress
+  name: auth-postgres
 spec:
   serviceName: auth-postgres   # must match the headless Service below
   replicas: 1

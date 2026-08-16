@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gym-platform-root-prod
+  namespace: argocd
+spec:
+  project: gym-platform
+  source:
+    repoURL: https://github.com/HyperScale-Fitness-Platform/gym-platform-gitops.git
+    targetRevision: main
+    path: services
+    directory:
+      recurse: true
+      # NOTE: with kustomize overlays, you actually want ArgoCD's
+      # "App of Apps" to point at per-service Application objects that
+      # each reference their DEV overlay specifically — see below.
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated: { prune: true, selfHeal: false }

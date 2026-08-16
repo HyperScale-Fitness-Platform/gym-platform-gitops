@@ -1,16 +1,18 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: auth-service-dev
+  name: api-gateway-prod
   namespace: argocd
 spec:
   project: gym-platform
   source:
     repoURL: https://github.com/HyperScale-Fitness-Platform/gym-platform-gitops.git
     targetRevision: main
-    path: services/auth-service/overlays/dev
+    path: services/api-gateway/overlays/prod
   destination:
     server: https://kubernetes.default.svc
-    namespace: gym-dev
+    namespace: gym-prod
   syncPolicy:
-    automated: { prune: true, selfHeal: true }
+    automated:
+      prune: true
+      selfHeal: false

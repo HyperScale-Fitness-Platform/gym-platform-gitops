@@ -6,9 +6,9 @@ metadata:
 spec:
   project: gym-platform
   source:
-    repoURL: https://github.com/<your-org>/gym-platform-gitops
+    repoURL: https://github.com/HyperScale-Fitness-Platform/gym-platform-gitops.git
     targetRevision: main
-    path: apps/auth-service/overlays/prod
+    path: services/auth-service/overlays/prod
   destination:
     server: https://kubernetes.default.svc
     namespace: gym-prod
@@ -16,5 +16,3 @@ spec:
     automated:
       prune: true
       selfHeal: false
-      # IMPORTANT DIFFERENCE: prod does NOT self-heal/auto-sync
-      # automatically by default — see explanation below.

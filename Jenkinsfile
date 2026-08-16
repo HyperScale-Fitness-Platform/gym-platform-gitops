@@ -71,30 +71,30 @@ pipeline {
             }
         }
 
-        stage('Deploy Database Layer (auth-service)') {
-            steps {
-                dir('services/auth-service/base') {
-                    sh """
-                        kubectl apply -f headless-service.yaml -n ${NAMESPACE}
-                        kubectl apply -f statefulset.yaml -n ${NAMESPACE}
-                        kubectl rollout status statefulset/auth-postgres -n ${NAMESPACE} --timeout=120s
-                    """
-                }
-            }
-        }
+        // stage('Deploy Database Layer (auth-service)') {
+        //     steps {
+        //         dir('services/auth-service/base') {
+        //             sh """
+        //                 kubectl apply -f headless-service.yaml -n ${NAMESPACE}
+        //                 kubectl apply -f statefulset.yaml -n ${NAMESPACE}
+        //                 kubectl rollout status statefulset/auth-postgres -n ${NAMESPACE} --timeout=120s
+        //             """
+        //         }
+        //     }
+        // }
 
-        stage('Run Database Migration (auth-service)') {
-            steps {
-                dir('services/auth-service/base') {
-                    sh """
-                        kubectl apply -f db-schema-configmap.yaml -n ${NAMESPACE}
-                        kubectl delete job auth-db-migrate -n ${NAMESPACE} --ignore-not-found
-                        kubectl apply -f db-migrate-job.yaml -n ${NAMESPACE}
-                        kubectl wait --for=condition=complete job/auth-db-migrate -n ${NAMESPACE} --timeout=90s
-                    """
-                }
-            }
-        }
+        // stage('Run Database Migration (auth-service)') {
+        //     steps {
+        //         dir('services/auth-service/base') {
+        //             sh """
+        //                 kubectl apply -f db-schema-configmap.yaml -n ${NAMESPACE}
+        //                 kubectl delete job auth-db-migrate -n ${NAMESPACE} --ignore-not-found
+        //                 kubectl apply -f db-migrate-job.yaml -n ${NAMESPACE}
+        //                 kubectl wait --for=condition=complete job/auth-db-migrate -n ${NAMESPACE} --timeout=90s
+        //             """
+        //         }
+        //     }
+        // }
 
         stage('Deploy auth-service') {
             steps {

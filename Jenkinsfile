@@ -19,7 +19,7 @@ pipeline {
         AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
         AWS_DEFAULT_REGION    = 'us-east-1'
 
-        CLUSTER_NAME = "gym-cluster-${params.ENVIRONMENT}"
+        CLUSTER_NAME = "gym-cluster"
         NAMESPACE    = "gym-${params.ENVIRONMENT}"
     }
 

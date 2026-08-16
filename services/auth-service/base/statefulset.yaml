@@ -32,11 +32,13 @@ spec:
               mountPath: /var/lib/postgresql/data
               subPath: postgres
           readinessProbe:
-            exec: { command: ["pg_isready", "-U", "$(POSTGRES_USER)"] }
+            exec:
+              command: ["pg_isready", "-h", "127.0.0.1", "-p", "5432"]
             initialDelaySeconds: 5
             periodSeconds: 5
           livenessProbe:
-            exec: { command: ["pg_isready", "-U", "$(POSTGRES_USER)"] }
+            exec:
+              command: ["pg_isready", "-h", "127.0.0.1", "-p", "5432"]
             initialDelaySeconds: 10
             periodSeconds: 10
   # volumeClaimTemplates is THE defining feature of a StatefulSet vs a

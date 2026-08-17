@@ -50,9 +50,9 @@ pipeline {
             steps {
                 sh """
                     kubectl apply -f shared/${params.ENVIRONMENT}-namespace.yaml
+                    kubectl apply -f shared/cluster-secret-store.yaml || true
                     kubectl apply -f shared/kafka.yaml
                 """
-                // kubectl apply -f shared/cluster-secret-store.yaml || true
             }
         }
 

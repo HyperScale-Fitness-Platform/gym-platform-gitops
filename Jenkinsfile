@@ -95,25 +95,21 @@ pipeline {
             steps {
                 script {
                     echo "Waiting for Argo CD to discover and sync all services in ${params.ENVIRONMENT}..."
-
+        
                     sh """
-                        # Trigger hard refresh on Root App so it discovers any new service configs immediately
+                        # Trigger hard refresh on Root App
                         kubectl patch application ${ROOT_APP} -n ${ARGOCD_NS} --type merge -p '{"operation":{"sync":{"prune":true}}}' || true
-
+        
                         echo "=== Waiting for Root Application (${ROOT_APP}) to be Healthy ==="
                         kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/${ROOT_APP} -n ${ARGOCD_NS} --timeout=180s
-
+        
                         echo "=== Waiting for Child Applications to be Synced & Healthy ==="
                         
-                        APPS=("auth-service-${params.ENVIRONMENT}" "api-gateway-${params.ENVIRONMENT}")
-
-                        for app in "\${APPS[@]}"; do
+                        # POSIX-compliant loop (works with /bin/sh)
+                        for app in auth-service-${params.ENVIRONMENT} api-gateway-${params.ENVIRONMENT}; do
                             echo "Waiting for \$app to sync and become Healthy..."
                             
-                            # Wait until sync status is Synced
                             kubectl wait --for=jsonpath='{.status.sync.status}'=Synced application/\$app -n ${ARGOCD_NS} --timeout=180s || true
-                            
-                            # Wait until workload health status is Healthy
                             kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/\$app -n ${ARGOCD_NS} --timeout=300s
                         done
                     """

@@ -99,20 +99,29 @@ pipeline {
         stage('Deploy auth-service') {
             steps {
                 dir("services/auth-service/overlays/${params.ENVIRONMENT}") {
-                    sh """
-                        # Substitute placeholders <account-id> and <region> dynamically in workspace
-                        sed -i.bak -e "s|<account-id>|${env.AWS_ACCOUNT_ID}|g" \
-                                   -e "s|<region>|${AWS_DEFAULT_REGION}|g" \
+                    sh '''
+                        # 1. Dynamically retrieve Account ID and Region inside the shell
+                        AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+                        AWS_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+
+                        echo "Replacing placeholders with Account: ${AWS_ACCOUNT_ID} and Region: ${AWS_REGION}"
+
+                        # 2. Perform substitution in kustomization.yaml
+                        sed -i.bak -e "s|<account-id>|${AWS_ACCOUNT_ID}|g" \
+                                   -e "s|<region>|${AWS_REGION}|g" \
                                    kustomization.yaml
                         rm -f kustomization.yaml.bak
 
-                        # Apply overlay
+                        # 3. Print the rendered manifest to Jenkins console for verification
+                        kubectl kustomize .
+
+                        # 4. Apply overlay
                         kubectl apply -k .
 
-                        # Trigger rollout to pull newest image
+                        # 5. Rollout restart and wait
                         kubectl rollout restart deployment/auth-service -n ${NAMESPACE}
                         kubectl rollout status deployment/auth-service -n ${NAMESPACE} --timeout=90s
-                    """
+                    '''
                 }
             }
         }
@@ -120,20 +129,24 @@ pipeline {
         stage('Deploy api-gateway') {
             steps {
                 dir("services/api-gateway/overlays/${params.ENVIRONMENT}") {
-                    sh """
-                        # Substitute placeholders <account-id> and <region> dynamically in workspace
-                        sed -i.bak -e "s|<account-id>|${env.AWS_ACCOUNT_ID}|g" \
-                                   -e "s|<region>|${AWS_DEFAULT_REGION}|g" \
+                    sh '''
+                        AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+                        AWS_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+
+                        echo "Replacing placeholders with Account: ${AWS_ACCOUNT_ID} and Region: ${AWS_REGION}"
+
+                        sed -i.bak -e "s|<account-id>|${AWS_ACCOUNT_ID}|g" \
+                                   -e "s|<region>|${AWS_REGION}|g" \
                                    kustomization.yaml
                         rm -f kustomization.yaml.bak
 
-                        # Apply overlay
+                        kubectl kustomize .
+
                         kubectl apply -k .
 
-                        # Trigger rollout to pull newest image
                         kubectl rollout restart deployment/api-gateway -n ${NAMESPACE}
                         kubectl rollout status deployment/api-gateway -n ${NAMESPACE} --timeout=90s
-                    """
+                    '''
                 }
             }
         }

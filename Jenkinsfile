@@ -100,27 +100,28 @@ pipeline {
             steps {
                 dir("services/auth-service/overlays/${params.ENVIRONMENT}") {
                     sh '''
-                        # 1. Dynamically retrieve Account ID and Region inside the shell
                         AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
                         AWS_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
-
+        
                         echo "Replacing placeholders with Account: ${AWS_ACCOUNT_ID} and Region: ${AWS_REGION}"
-
-                        # 2. Perform substitution in kustomization.yaml
+        
                         sed -i.bak -e "s|<account-id>|${AWS_ACCOUNT_ID}|g" \
                                    -e "s|<region>|${AWS_REGION}|g" \
                                    kustomization.yaml
                         rm -f kustomization.yaml.bak
-
-                        # 3. Print the rendered manifest to Jenkins console for verification
-                        kubectl kustomize .
-
-                        # 4. Apply overlay
+        
+                        # Apply all resources
                         kubectl apply -k .
-
-                        # 5. Rollout restart and wait
+        
+                        # 1. Wait for ExternalSecret to generate the k8s secret
+                        kubectl wait --for=condition=Ready externalsecret/auth-svc-credentials -n ${NAMESPACE} --timeout=60s || true
+        
+                        # 2. Wait for Postgres StatefulSet to be ready
+                        kubectl rollout status statefulset/auth-postgres -n ${NAMESPACE} --timeout=120s
+        
+                        # 3. Rollout auth-service with increased timeout
                         kubectl rollout restart deployment/auth-service -n ${NAMESPACE}
-                        kubectl rollout status deployment/auth-service -n ${NAMESPACE} --timeout=90s
+                        kubectl rollout status deployment/auth-service -n ${NAMESPACE} --timeout=180s
                     '''
                 }
             }

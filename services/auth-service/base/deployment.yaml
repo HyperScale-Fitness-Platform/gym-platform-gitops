@@ -20,7 +20,7 @@ spec:
           command: ['sh', '-c', 'until pg_isready -h auth-postgres -p 5432; do echo waiting for database; sleep 2; done;']
       containers:
         - name: auth-service
-          image: <account-id>.dkr.ecr.<region>.amazonaws.com/gym-auth-service:latest
+          image: gym-auth-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 4000

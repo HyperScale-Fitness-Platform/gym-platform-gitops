@@ -10,7 +10,12 @@ pipeline {
         booleanParam(
             name: 'SKIP_BUILD',
             defaultValue: false,
-            description: 'Skip triggering per-service build/push jobs and only apply existing manifests'
+            description: 'Skip triggering per-service build/push jobs and only apply manifests'
+        )
+        booleanParam(
+            name: 'SYNC_ARGOCD',
+            defaultValue: true,
+            description: 'Trigger Argo CD sync and wait for health check'
         )
     }
 
@@ -21,6 +26,8 @@ pipeline {
 
         CLUSTER_NAME = "gym-cluster"
         NAMESPACE    = "gym-${params.ENVIRONMENT}"
+        ARGOCD_NS    = "argocd"
+        ROOT_APP     = "gym-platform-root-${params.ENVIRONMENT}"
     }
 
     stages {
@@ -30,27 +37,22 @@ pipeline {
             }
         }
 
-        stage('Authenticate to Cluster & Fetch AWS Identity') {
+        stage('Authenticate to Cluster') {
             steps {
                 sh """
-                    # Authenticate kubectl to the EKS cluster
                     aws eks update-kubeconfig --region ${AWS_DEFAULT_REGION} --name ${CLUSTER_NAME}
                     kubectl version --client
                 """
-                script {
-                    // Dynamically get the current AWS Account ID
-                    env.AWS_ACCOUNT_ID = sh(
-                        script: 'aws sts get-caller-identity --query "Account" --output text',
-                        returnStdout: true
-                    ).trim()
-                }
             }
         }
 
-        stage('Apply Shared Resources') {
+        stage('Apply Shared Resources & Namespaces') {
             steps {
-                sh "kubectl apply -f shared/kafka.yaml"
-                sh "kubectl apply -f shared/${params.ENVIRONMENT}-namespace.yaml"
+                sh """
+                    kubectl apply -f shared/${params.ENVIRONMENT}-namespace.yaml
+                    kubectl apply -f shared/cluster-secret-store.yaml || true
+                    kubectl apply -f shared/kafka.yaml
+                """
             }
         }
 
@@ -61,7 +63,6 @@ pipeline {
             steps {
                 script {
                     def services = ['gym-auth-svc-deployment', 'gym-api-gateway-deployment']
-
                     services.each { jobName ->
                         echo "Triggering ${jobName} for environment ${params.ENVIRONMENT}..."
                         build job: jobName,
@@ -72,83 +73,50 @@ pipeline {
             }
         }
 
-        // stage('Deploy Database Layer (auth-service)') {
-        //     steps {
-        //         dir('services/auth-service/base') {
-        //             sh """
-        //                 kubectl apply -f headless-service.yaml -n ${NAMESPACE}
-        //                 kubectl apply -f statefulset.yaml -n ${NAMESPACE}
-        //                 kubectl rollout status statefulset/auth-postgres -n ${NAMESPACE} --timeout=120s
-        //             """
-        //         }
-        //     }
-        // }
-
-        // stage('Run Database Migration (auth-service)') {
-        //     steps {
-        //         dir('services/auth-service/base') {
-        //             sh """
-        //                 kubectl apply -f db-schema-configmap.yaml -n ${NAMESPACE}
-        //                 kubectl delete job auth-db-migrate -n ${NAMESPACE} --ignore-not-found
-        //                 kubectl apply -f db-migrate-job.yaml -n ${NAMESPACE}
-        //                 kubectl wait --for=condition=complete job/auth-db-migrate -n ${NAMESPACE} --timeout=90s
-        //             """
-        //         }
-        //     }
-        // }
-
-        stage('Deploy auth-service') {
+        stage('Bootstrap ArgoCD App of Apps') {
             steps {
-                dir("services/auth-service/overlays/${params.ENVIRONMENT}") {
-                    sh '''
-                        AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
-                        AWS_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+                script {
+                    echo "Ensuring AppProject and Root Application exist..."
+                    sh """
+                        # 1. Apply the Project definition
+                        kubectl apply -f argocd/projects/gym-project.yaml -n ${ARGOCD_NS}
 
-                        echo "Replacing placeholders with Account: ${AWS_ACCOUNT_ID} and Region: ${AWS_REGION}"
-
-                        sed -i.bak -e "s|<account-id>|${AWS_ACCOUNT_ID}|g" \
-                                   -e "s|<region>|${AWS_REGION}|g" \
-                                   kustomization.yaml
-                        rm -f kustomization.yaml.bak
-
-                        # Apply all resources
-                        kubectl apply -k .
-
-                        # 1. Wait for ExternalSecret to generate the k8s secret
-                        kubectl wait --for=condition=Ready externalsecret/auth-svc-credentials -n ${NAMESPACE} --timeout=60s || true
-
-                        # 2. Wait for Postgres StatefulSet to be ready
-                        kubectl rollout status statefulset/auth-postgres -n ${NAMESPACE} --timeout=120s
-
-                        # 3. Rollout auth-service with increased timeout
-                        kubectl rollout restart deployment/auth-service -n ${NAMESPACE}
-                        kubectl rollout status deployment/auth-service -n ${NAMESPACE} --timeout=180s
-                    '''
+                        # 2. Apply the Environment Root App (Dev or Prod)
+                        kubectl apply -f argocd/root-apps/root-app-${params.ENVIRONMENT}.yaml -n ${ARGOCD_NS}
+                    """
                 }
             }
         }
 
-        stage('Deploy api-gateway') {
+        stage('Sync & Watch ArgoCD Deployment') {
+            when {
+                expression { params.SYNC_ARGOCD == true }
+            }
             steps {
-                dir("services/api-gateway/overlays/${params.ENVIRONMENT}") {
-                    sh '''
-                        AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
-                        AWS_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+                script {
+                    echo "Waiting for Argo CD to discover and sync all services in ${params.ENVIRONMENT}..."
 
-                        echo "Replacing placeholders with Account: ${AWS_ACCOUNT_ID} and Region: ${AWS_REGION}"
+                    sh """
+                        # Trigger hard refresh on Root App so it discovers any new service configs immediately
+                        kubectl patch application ${ROOT_APP} -n ${ARGOCD_NS} --type merge -p '{"operation":{"sync":{"prune":true}}}' || true
 
-                        sed -i.bak -e "s|<account-id>|${AWS_ACCOUNT_ID}|g" \
-                                   -e "s|<region>|${AWS_REGION}|g" \
-                                   kustomization.yaml
-                        rm -f kustomization.yaml.bak
+                        echo "=== Waiting for Root Application (${ROOT_APP}) to be Healthy ==="
+                        kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/${ROOT_APP} -n ${ARGOCD_NS} --timeout=180s
 
-                        kubectl kustomize .
+                        echo "=== Waiting for Child Applications to be Synced & Healthy ==="
+                        
+                        APPS=("auth-service-${params.ENVIRONMENT}" "api-gateway-${params.ENVIRONMENT}")
 
-                        kubectl apply -k .
-
-                        kubectl rollout restart deployment/api-gateway -n ${NAMESPACE}
-                        kubectl rollout status deployment/api-gateway -n ${NAMESPACE} --timeout=90s
-                    '''
+                        for app in "\${APPS[@]}"; do
+                            echo "Waiting for \$app to sync and become Healthy..."
+                            
+                            # Wait until sync status is Synced
+                            kubectl wait --for=jsonpath='{.status.sync.status}'=Synced application/\$app -n ${ARGOCD_NS} --timeout=180s || true
+                            
+                            # Wait until workload health status is Healthy
+                            kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/\$app -n ${ARGOCD_NS} --timeout=300s
+                        done
+                    """
                 }
             }
         }
@@ -187,7 +155,7 @@ pipeline {
             cleanWs()
         }
         success {
-            echo "Full ${params.ENVIRONMENT} deployment succeeded: shared -> auth-service (db + migration + app) -> api-gateway -> smoke test."
+            echo "Full ${params.ENVIRONMENT} deployment and Argo CD sync succeeded!"
         }
         failure {
             echo "Deployment to ${params.ENVIRONMENT} failed — check which stage above stopped the sequence."

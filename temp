@@ -5,24 +5,22 @@ pipeline {
         choice(
             name: 'ENVIRONMENT',
             choices: ['dev', 'prod'],
-            description: 'Target environment overlay to update in GitOps'
+            description: 'Which overlay/environment to deploy'
+        )
+        booleanParam(
+            name: 'SKIP_BUILD',
+            defaultValue: false,
+            description: 'Skip triggering per-service build/push jobs and only apply existing manifests'
         )
     }
 
     environment {
-        ECR_REPO_NAME = "gym-api-gateway"
-        NAMESPACE     = "gym-dev"
-        AWS_REGION    = "us-east-1"
-
-        // Safe evaluation fallback for Git SHA
-        IMAGE_TAG     = "${env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : 'latest'}"
-
-        // AWS Credentials from Jenkins Store
         AWS_ACCESS_KEY_ID     = credentials('aws-access-key-id')
         AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
-        AWS_ACCOUNT_ID        = credentials('aws-account-id')
+        AWS_DEFAULT_REGION    = 'us-east-1'
 
-        GITOPS_REPO_URL = "https://github.com/HyperScale-Fitness-Platform/gym-platform-gitops.git"
+        CLUSTER_NAME = "gym-cluster"
+        NAMESPACE    = "gym-${params.ENVIRONMENT}"
     }
 
     stages {
@@ -32,63 +30,152 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
-            agent {
-                docker { image 'node:20-alpine' }
-            }
+        stage('Authenticate to Cluster & Fetch AWS Identity') {
             steps {
-                sh 'npm install'
-            }
-        }
-
-        stage('ECR Authentication') {
-            steps {
-                echo '🔐 Authenticating Docker daemon with AWS ECR...'
-                sh "aws ecr get-login-password --region ${env.AWS_REGION} | docker login --username AWS --password-stdin ${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com"
-            }
-        }
-
-        stage('Build Container Image') {
-            steps {
-                echo "🏭 Building Docker image tagged as: ${env.IMAGE_TAG}..."
                 sh """
-                    docker build -t ${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/${env.ECR_REPO_NAME}:${env.IMAGE_TAG} .
-                    docker tag ${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/${env.ECR_REPO_NAME}:${env.IMAGE_TAG} ${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/${env.ECR_REPO_NAME}:latest
+                    # Authenticate kubectl to the EKS cluster
+                    aws eks update-kubeconfig --region ${AWS_DEFAULT_REGION} --name ${CLUSTER_NAME}
+                    kubectl version --client
                 """
+                script {
+                    // Dynamically get the current AWS Account ID
+                    env.AWS_ACCOUNT_ID = sh(
+                        script: 'aws sts get-caller-identity --query "Account" --output text',
+                        returnStdout: true
+                    ).trim()
+                }
             }
         }
 
-        stage('Push Image to AWS ECR') {
+        stage('Apply Shared Resources') {
             steps {
-                echo "🚀 Pushing image artifact [${env.IMAGE_TAG}] to AWS ECR..."
-                sh """
-                    docker push ${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/${env.ECR_REPO_NAME}:${env.IMAGE_TAG}
-                    docker push ${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/${env.ECR_REPO_NAME}:latest
-                """
+                sh "kubectl apply -f shared/kafka.yaml"
+                sh "kubectl apply -f shared/${params.ENVIRONMENT}-namespace.yaml"
             }
         }
 
-        stage('Update Image Tag in GitOps Repo') {
+        stage('Build & Push Service Images') {
+            when {
+                expression { params.SKIP_BUILD == false }
+            }
             steps {
-                withCredentials([usernamePassword(credentialsId: 'github-pat', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                script {
+                    def services = ['gym-auth-svc-deployment', 'gym-api-gateway-deployment']
+
+                    services.each { jobName ->
+                        echo "Triggering ${jobName} for environment ${params.ENVIRONMENT}..."
+                        build job: jobName,
+                              parameters: [string(name: 'ENVIRONMENT', value: params.ENVIRONMENT)],
+                              wait: true
+                    }
+                }
+            }
+        }
+
+        // stage('Deploy Database Layer (auth-service)') {
+        //     steps {
+        //         dir('services/auth-service/base') {
+        //             sh """
+        //                 kubectl apply -f headless-service.yaml -n ${NAMESPACE}
+        //                 kubectl apply -f statefulset.yaml -n ${NAMESPACE}
+        //                 kubectl rollout status statefulset/auth-postgres -n ${NAMESPACE} --timeout=120s
+        //             """
+        //         }
+        //     }
+        // }
+
+        // stage('Run Database Migration (auth-service)') {
+        //     steps {
+        //         dir('services/auth-service/base') {
+        //             sh """
+        //                 kubectl apply -f db-schema-configmap.yaml -n ${NAMESPACE}
+        //                 kubectl delete job auth-db-migrate -n ${NAMESPACE} --ignore-not-found
+        //                 kubectl apply -f db-migrate-job.yaml -n ${NAMESPACE}
+        //                 kubectl wait --for=condition=complete job/auth-db-migrate -n ${NAMESPACE} --timeout=90s
+        //             """
+        //         }
+        //     }
+        // }
+
+        stage('Deploy auth-service') {
+            steps {
+                dir("services/auth-service/overlays/${params.ENVIRONMENT}") {
+                    sh '''
+                        AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+                        AWS_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+
+                        echo "Replacing placeholders with Account: ${AWS_ACCOUNT_ID} and Region: ${AWS_REGION}"
+
+                        sed -i.bak -e "s|<account-id>|${AWS_ACCOUNT_ID}|g" \
+                                   -e "s|<region>|${AWS_REGION}|g" \
+                                   kustomization.yaml
+                        rm -f kustomization.yaml.bak
+
+                        # Apply all resources
+                        kubectl apply -k .
+
+                        # 1. Wait for ExternalSecret to generate the k8s secret
+                        kubectl wait --for=condition=Ready externalsecret/auth-svc-credentials -n ${NAMESPACE} --timeout=60s || true
+
+                        # 2. Wait for Postgres StatefulSet to be ready
+                        kubectl rollout status statefulset/auth-postgres -n ${NAMESPACE} --timeout=120s
+
+                        # 3. Rollout auth-service with increased timeout
+                        kubectl rollout restart deployment/auth-service -n ${NAMESPACE}
+                        kubectl rollout status deployment/auth-service -n ${NAMESPACE} --timeout=180s
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy api-gateway') {
+            steps {
+                dir("services/api-gateway/overlays/${params.ENVIRONMENT}") {
+                    sh '''
+                        AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+                        AWS_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+
+                        echo "Replacing placeholders with Account: ${AWS_ACCOUNT_ID} and Region: ${AWS_REGION}"
+
+                        sed -i.bak -e "s|<account-id>|${AWS_ACCOUNT_ID}|g" \
+                                   -e "s|<region>|${AWS_REGION}|g" \
+                                   kustomization.yaml
+                        rm -f kustomization.yaml.bak
+
+                        kubectl kustomize .
+
+                        kubectl apply -k .
+
+                        kubectl rollout restart deployment/api-gateway -n ${NAMESPACE}
+                        kubectl rollout status deployment/api-gateway -n ${NAMESPACE} --timeout=90s
+                    '''
+                }
+            }
+        }
+
+        stage('Full System Smoke Test') {
+            steps {
+                script {
+                    echo "Waiting for Ingress ALB hostname..."
+                    def albAddress = ""
+                    timeout(time: 3, unit: 'MINUTES') {
+                        waitUntil {
+                            albAddress = sh(
+                                script: "kubectl get ingress api-gateway-ingress -n ${NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true",
+                                returnStdout: true
+                            ).trim()
+                            return (albAddress != null && albAddress != "")
+                        }
+                    }
+
+                    echo "ALB Endpoint: http://${albAddress}"
+                    sh "curl -sf http://${albAddress}/health || echo 'Health check warning'"
+
                     sh """
-                        rm -rf gitops-repo
-                        git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/HyperScale-Fitness-Platform/gym-platform-gitops.git gitops-repo
-                        
-                        cd gitops-repo/services/api-gateway/overlays/${params.ENVIRONMENT}
-
-                        # Update Kustomization image tag
-                        kustomize edit set image ${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/${env.ECR_REPO_NAME}=${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/${env.ECR_REPO_NAME}:${env.IMAGE_TAG}
-
-                        git config user.email "jenkins@gym-platform.com"
-                        git config user.name "Jenkins CI"
-                        
-                        git add kustomization.yaml
-                        git commit -m "ci(api-gateway): update ${params.ENVIRONMENT} image tag -> ${env.IMAGE_TAG}"
-                        
-                        # Rebase before pushing to prevent race condition conflicts if run in parallel
-                        git pull --rebase origin main
-                        git push origin main
+                        curl -sf -X POST http://${albAddress}/auth/register \
+                          -H "Content-Type: application/json" \
+                          -d '{"email":"smoketest-${env.BUILD_NUMBER}@test.com","password":"secret123","role":"customer"}' \
+                          || echo "Registration smoke test completed with warning."
                     """
                 }
             }
@@ -96,11 +183,14 @@ pipeline {
     }
 
     post {
+        always {
+            cleanWs()
+        }
         success {
-            echo "✅ api-gateway:${env.IMAGE_TAG} build complete and GitOps repo updated successfully!"
+            echo "Full ${params.ENVIRONMENT} deployment succeeded: shared -> auth-service (db + migration + app) -> api-gateway -> smoke test."
         }
         failure {
-            echo "❌ Pipeline failed! Check the step diagnostics above."
+            echo "Deployment to ${params.ENVIRONMENT} failed — check which stage above stopped the sequence."
         }
     }
 }

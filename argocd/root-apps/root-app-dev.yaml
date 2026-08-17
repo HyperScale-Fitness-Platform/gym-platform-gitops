@@ -11,11 +11,11 @@ spec:
     path: services
     directory:
       recurse: true
-      # NOTE: with kustomize overlays, you actually want ArgoCD's
-      # "App of Apps" to point at per-service Application objects that
-      # each reference their DEV overlay specifically — see below.
+      include: "application-dev.yaml" # <-- Only deploys child dev Application CRDs
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
   syncPolicy:
-    automated: { prune: true, selfHeal: true }
+    automated:
+      prune: true
+      selfHeal: true

@@ -8,8 +8,13 @@ spec:
   sourceRepos:
     - https://github.com/HyperScale-Fitness-Platform/gym-platform-gitops.git
   destinations:
+    - namespace: argocd
+      server: https://kubernetes.default.svc
     - namespace: gym-dev
       server: https://kubernetes.default.svc
   clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  namespaceResourceWhitelist:
     - group: '*'
       kind: '*'

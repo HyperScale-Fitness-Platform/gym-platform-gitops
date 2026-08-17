@@ -49,6 +49,7 @@ pipeline {
 
         stage('Apply Shared Resources') {
             steps {
+                sh "kubectl apply -f shared/kafka.yaml"
                 sh "kubectl apply -f shared/${params.ENVIRONMENT}-namespace.yaml"
             }
         }
@@ -102,23 +103,23 @@ pipeline {
                     sh '''
                         AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
                         AWS_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
-        
+
                         echo "Replacing placeholders with Account: ${AWS_ACCOUNT_ID} and Region: ${AWS_REGION}"
-        
+
                         sed -i.bak -e "s|<account-id>|${AWS_ACCOUNT_ID}|g" \
                                    -e "s|<region>|${AWS_REGION}|g" \
                                    kustomization.yaml
                         rm -f kustomization.yaml.bak
-        
+
                         # Apply all resources
                         kubectl apply -k .
-        
+
                         # 1. Wait for ExternalSecret to generate the k8s secret
                         kubectl wait --for=condition=Ready externalsecret/auth-svc-credentials -n ${NAMESPACE} --timeout=60s || true
-        
+
                         # 2. Wait for Postgres StatefulSet to be ready
                         kubectl rollout status statefulset/auth-postgres -n ${NAMESPACE} --timeout=120s
-        
+
                         # 3. Rollout auth-service with increased timeout
                         kubectl rollout restart deployment/auth-service -n ${NAMESPACE}
                         kubectl rollout status deployment/auth-service -n ${NAMESPACE} --timeout=180s

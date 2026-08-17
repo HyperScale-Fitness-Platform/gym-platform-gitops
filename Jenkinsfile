@@ -37,6 +37,20 @@ pipeline {
             }
         }
 
+        stage('Install Kustomize') {
+            steps {
+                sh '''
+                    mkdir -p "$WORKSPACE/bin"
+                    if [ -x "$WORKSPACE/bin/kustomize" ]; then
+                        echo "kustomize already installed: $($WORKSPACE/bin/kustomize version)"
+                    else
+                        echo "Installing kustomize..."
+                        curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s -- "$WORKSPACE/bin"
+                        "$WORKSPACE/bin/kustomize" version
+                    fi
+                '''
+            }
+        }
         stage('Authenticate to Cluster') {
             steps {
                 sh """
@@ -70,6 +84,25 @@ pipeline {
                               wait: true
                     }
                 }
+            }
+        }
+
+        stage('Update Image in GitOps Repo') {
+            steps {
+                sh """
+                    ACCOUNT_ID=\$(aws sts get-caller-identity --query Account --output text)
+
+                    rm -rf gitops-repo
+                    git clone https://github.com/HyperScale-Fitness-Platform/gym-platform-gitops.git gitops-repo
+                    cd gitops-repo/services/auth-service/overlays/${params.ENVIRONMENT}
+
+                    kustomize edit set image gym-auth-service=\$ACCOUNT_ID.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/gym-auth-service:${IMAGE_TAG}
+
+                    git config user.email "jenkins@gym-platform.com"
+                    git config user.name "Jenkins CI"
+                    git commit -am "auth-service (${params.ENVIRONMENT}) -> ${IMAGE_TAG}"
+                    git push origin main
+                """
             }
         }
 

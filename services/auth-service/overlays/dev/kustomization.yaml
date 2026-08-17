@@ -12,7 +12,7 @@ namespace: gym-dev
 images:
   - name: gym-auth-service
     newName: <account-id>.dkr.ecr.<region>.amazonaws.com/gym-auth-service
-    newTag: dev-latest
+    newTag: latest
 
 # Environment-specific deployment overrides
 patches:

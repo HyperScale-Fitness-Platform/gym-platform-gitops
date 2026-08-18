@@ -88,13 +88,13 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'github-creds', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
                     sh """
                         set -e
-        
+
                         git checkout -B main origin/main
-        
+
                         for svc in auth-service api-gateway; do
                             TEMPLATE_PATH="services/\$svc/overlays/${params.ENVIRONMENT}/kustomization.yaml.template"
                             OUTPUT_PATH="services/\$svc/overlays/${params.ENVIRONMENT}/kustomization.yaml"
-        
+
                             if [ -f "\$TEMPLATE_PATH" ]; then
                                 echo "Rendering \$TEMPLATE_PATH -> \$OUTPUT_PATH"
                                 sed \
@@ -106,13 +106,13 @@ pipeline {
                                 exit 1
                             fi
                         done
-        
+
                         git config user.email "jenkins@gym-platform.com"
                         git config user.name "Jenkins CI"
-        
+
                         git add services/auth-service/overlays/${params.ENVIRONMENT}/kustomization.yaml
                         git add services/api-gateway/overlays/${params.ENVIRONMENT}/kustomization.yaml
-        
+
                         if git diff --cached --quiet; then
                             echo "No changes to commit — kustomization files already up to date."
                         else
@@ -163,6 +163,29 @@ pipeline {
                             kubectl wait --for=jsonpath='{.status.sync.status}'=Synced application/\$app -n ${ARGOCD_NS} --timeout=180s || true
                             kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/\$app -n ${ARGOCD_NS} --timeout=300s
                         done
+                    """
+                }
+            }
+        }
+
+        stage('Retrieve ArgoCD Credentials & Access Info') {
+            steps {
+                script {
+                    echo "=== Fetching Argo CD Admin Credentials ==="
+                    sh """
+                        # Fetch and decode initial admin password
+                        ADMIN_PASS=\$(kubectl -n ${ARGOCD_NS} get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d || echo "Password not in initial secret (may have been changed)")
+
+                        echo "========================================================="
+                        echo "  Argo CD UI Access Details                              "
+                        echo "========================================================="
+                        echo "  URL:       https://localhost:8080"
+                        echo "  Username:  admin"
+                        echo "  Password:  \${ADMIN_PASS}"
+                        echo ""
+                        echo "  To access locally, run on your machine:"
+                        echo "    kubectl port-forward svc/argocd-server -n ${ARGOCD_NS} 8080:443"
+                        echo "========================================================="
                     """
                 }
             }

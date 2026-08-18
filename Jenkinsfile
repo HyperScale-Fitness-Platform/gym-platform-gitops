@@ -73,23 +73,20 @@ pipeline {
             }
         }
 
-        stage('Generate Env File') {
+       stage('Generate Env File') {
             steps {
                 script {
-                    def accountId = sh(script: "aws sts get-caller-identity --query Account --output text", returnStdout: true).trim()
-
-                    writeFile file: 'deploy.env', text: "ACCOUNT_ID=${accountId}\nREGION=${AWS_DEFAULT_REGION}\n"
-                    echo "Generated deploy.env:"
-                    sh "cat deploy.env"
+                    env.RESOLVED_ACCOUNT_ID = sh(script: "aws sts get-caller-identity --query Account --output text", returnStdout: true).trim()
+                    env.RESOLVED_REGION = "${AWS_DEFAULT_REGION}"
+                    echo "Resolved ACCOUNT_ID=${env.RESOLVED_ACCOUNT_ID}, REGION=${env.RESOLVED_REGION}"
                 }
             }
         }
-
+        
         stage('Resolve Kustomization Templates & Push to GitHub') {
             steps {
                 sh """
                     set -e
-                    . deploy.env
         
                     for svc in auth-service api-gateway; do
                         TEMPLATE_PATH="services/\$svc/overlays/${params.ENVIRONMENT}/kustomization.yaml.template"
@@ -98,8 +95,8 @@ pipeline {
                         if [ -f "\$TEMPLATE_PATH" ]; then
                             echo "Rendering \$TEMPLATE_PATH -> \$OUTPUT_PATH"
                             sed \
-                                -e "s|__ACCOUNT_ID__|\$ACCOUNT_ID|g" \
-                                -e "s|__REGION__|\$REGION|g" \
+                                -e "s|__ACCOUNT_ID__|${env.RESOLVED_ACCOUNT_ID}|g" \
+                                -e "s|__REGION__|${env.RESOLVED_REGION}|g" \
                                 "\$TEMPLATE_PATH" > "\$OUTPUT_PATH"
                         else
                             echo "WARNING: \$TEMPLATE_PATH not found, skipping"

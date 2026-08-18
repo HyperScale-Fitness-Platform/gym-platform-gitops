@@ -82,11 +82,18 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Resolve Kustomization Templates & Push to GitHub') {
             steps {
                 sh """
                     set -e
+        
+                    git checkout -B main origin/main
+                    # Jenkins's checkout scm leaves this workspace on a detached
+                    # HEAD (pointed at a specific commit SHA, not a branch) —
+                    # this creates/resets a local "main" branch pointed at
+                    # origin/main's current tip, so the commit below lands on a
+                    # real branch that can actually be pushed.
         
                     for svc in auth-service api-gateway; do
                         TEMPLATE_PATH="services/\$svc/overlays/${params.ENVIRONMENT}/kustomization.yaml.template"
@@ -99,7 +106,8 @@ pipeline {
                                 -e "s|__REGION__|${env.RESOLVED_REGION}|g" \
                                 "\$TEMPLATE_PATH" > "\$OUTPUT_PATH"
                         else
-                            echo "WARNING: \$TEMPLATE_PATH not found, skipping"
+                            echo "ERROR: \$TEMPLATE_PATH not found — cannot resolve image reference"
+                            exit 1
                         fi
                     done
         

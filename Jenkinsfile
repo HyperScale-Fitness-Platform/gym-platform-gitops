@@ -37,20 +37,6 @@ pipeline {
             }
         }
 
-        stage('Install Kustomize') {
-            steps {
-                sh '''
-                    mkdir -p "$WORKSPACE/bin"
-                    if [ -x "$WORKSPACE/bin/kustomize" ]; then
-                        echo "kustomize already installed: $($WORKSPACE/bin/kustomize version)"
-                    else
-                        echo "Installing kustomize..."
-                        curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s -- "$WORKSPACE/bin"
-                        "$WORKSPACE/bin/kustomize" version
-                    fi
-                '''
-            }
-        }
         stage('Authenticate to Cluster') {
             steps {
                 sh """
@@ -87,21 +73,51 @@ pipeline {
             }
         }
 
-        stage('Update Image in GitOps Repo') {
+        stage('Generate Env File') {
+            steps {
+                script {
+                    def accountId = sh(script: "aws sts get-caller-identity --query Account --output text", returnStdout: true).trim()
+        
+                    writeFile file: 'deploy.env', text: "ACCOUNT_ID=${accountId}\nREGION=${AWS_DEFAULT_REGION}\n"
+                    echo "Generated deploy.env:"
+                    sh "cat deploy.env"
+                }
+            }
+        }
+        
+        stage('Resolve Kustomization Templates & Push to GitHub') {
             steps {
                 sh """
-                    ACCOUNT_ID=\$(aws sts get-caller-identity --query Account --output text)
-
-                    rm -rf gitops-repo
-                    git clone https://github.com/HyperScale-Fitness-Platform/gym-platform-gitops.git gitops-repo
-                    cd gitops-repo/services/auth-service/overlays/${params.ENVIRONMENT}
-
-                    kustomize edit set image gym-auth-service=\$ACCOUNT_ID.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/gym-auth-service:${IMAGE_TAG}
-
+                    set -e
+                    source deploy.env
+        
+                    for svc in auth-service api-gateway; do
+                        TEMPLATE_PATH="services/\$svc/overlays/${params.ENVIRONMENT}/kustomization.yaml.template"
+                        OUTPUT_PATH="services/\$svc/overlays/${params.ENVIRONMENT}/kustomization.yaml"
+        
+                        if [ -f "\$TEMPLATE_PATH" ]; then
+                            echo "Rendering \$TEMPLATE_PATH -> \$OUTPUT_PATH"
+                            sed \
+                                -e "s|__ACCOUNT_ID__|\$ACCOUNT_ID|g" \
+                                -e "s|__REGION__|\$REGION|g" \
+                                "\$TEMPLATE_PATH" > "\$OUTPUT_PATH"
+                        else
+                            echo "WARNING: \$TEMPLATE_PATH not found, skipping"
+                        fi
+                    done
+        
                     git config user.email "jenkins@gym-platform.com"
                     git config user.name "Jenkins CI"
-                    git commit -am "auth-service (${params.ENVIRONMENT}) -> ${IMAGE_TAG}"
-                    git push origin main
+        
+                    git add services/auth-service/overlays/${params.ENVIRONMENT}/kustomization.yaml
+                    git add services/api-gateway/overlays/${params.ENVIRONMENT}/kustomization.yaml
+        
+                    if git diff --cached --quiet; then
+                        echo "No changes to commit — kustomization files already up to date."
+                    else
+                        git commit -m "Resolve account/region for ${params.ENVIRONMENT} (build \${BUILD_NUMBER})"
+                        git push origin main
+                    fi
                 """
             }
         }

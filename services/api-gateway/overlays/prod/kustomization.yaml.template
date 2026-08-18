@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+namespace: gym-prod
+
+images:
+  - name: gym-api-gateway
+    newName: __ACCOUNT_ID__.dkr.ecr.__REGION__.amazonaws.com/gym-api-gateway
+    newTag: v1.0.0
+
+patches:
+  - path: patch-deployment.yaml

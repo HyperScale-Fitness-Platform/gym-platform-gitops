@@ -77,19 +77,19 @@ pipeline {
             steps {
                 script {
                     def accountId = sh(script: "aws sts get-caller-identity --query Account --output text", returnStdout: true).trim()
-        
+
                     writeFile file: 'deploy.env', text: "ACCOUNT_ID=${accountId}\nREGION=${AWS_DEFAULT_REGION}\n"
                     echo "Generated deploy.env:"
                     sh "cat deploy.env"
                 }
             }
         }
-        
+
         stage('Resolve Kustomization Templates & Push to GitHub') {
             steps {
                 sh """
                     set -e
-                    source deploy.env
+                    . deploy.env
         
                     for svc in auth-service api-gateway; do
                         TEMPLATE_PATH="services/\$svc/overlays/${params.ENVIRONMENT}/kustomization.yaml.template"

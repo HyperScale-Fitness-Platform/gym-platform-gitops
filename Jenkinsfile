@@ -85,45 +85,42 @@ pipeline {
 
         stage('Resolve Kustomization Templates & Push to GitHub') {
             steps {
-                sh """
-                    set -e
+                withCredentials([usernamePassword(credentialsId: 'github-creds', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                    sh """
+                        set -e
         
-                    git checkout -B main origin/main
-                    # Jenkins's checkout scm leaves this workspace on a detached
-                    # HEAD (pointed at a specific commit SHA, not a branch) —
-                    # this creates/resets a local "main" branch pointed at
-                    # origin/main's current tip, so the commit below lands on a
-                    # real branch that can actually be pushed.
+                        git checkout -B main origin/main
         
-                    for svc in auth-service api-gateway; do
-                        TEMPLATE_PATH="services/\$svc/overlays/${params.ENVIRONMENT}/kustomization.yaml.template"
-                        OUTPUT_PATH="services/\$svc/overlays/${params.ENVIRONMENT}/kustomization.yaml"
+                        for svc in auth-service api-gateway; do
+                            TEMPLATE_PATH="services/\$svc/overlays/${params.ENVIRONMENT}/kustomization.yaml.template"
+                            OUTPUT_PATH="services/\$svc/overlays/${params.ENVIRONMENT}/kustomization.yaml"
         
-                        if [ -f "\$TEMPLATE_PATH" ]; then
-                            echo "Rendering \$TEMPLATE_PATH -> \$OUTPUT_PATH"
-                            sed \
-                                -e "s|__ACCOUNT_ID__|${env.RESOLVED_ACCOUNT_ID}|g" \
-                                -e "s|__REGION__|${env.RESOLVED_REGION}|g" \
-                                "\$TEMPLATE_PATH" > "\$OUTPUT_PATH"
+                            if [ -f "\$TEMPLATE_PATH" ]; then
+                                echo "Rendering \$TEMPLATE_PATH -> \$OUTPUT_PATH"
+                                sed \
+                                    -e "s|__ACCOUNT_ID__|${env.RESOLVED_ACCOUNT_ID}|g" \
+                                    -e "s|__REGION__|${env.RESOLVED_REGION}|g" \
+                                    "\$TEMPLATE_PATH" > "\$OUTPUT_PATH"
+                            else
+                                echo "ERROR: \$TEMPLATE_PATH not found — cannot resolve image reference"
+                                exit 1
+                            fi
+                        done
+        
+                        git config user.email "jenkins@gym-platform.com"
+                        git config user.name "Jenkins CI"
+        
+                        git add services/auth-service/overlays/${params.ENVIRONMENT}/kustomization.yaml
+                        git add services/api-gateway/overlays/${params.ENVIRONMENT}/kustomization.yaml
+        
+                        if git diff --cached --quiet; then
+                            echo "No changes to commit — kustomization files already up to date."
                         else
-                            echo "ERROR: \$TEMPLATE_PATH not found — cannot resolve image reference"
-                            exit 1
+                            git commit -m "Resolve account/region for ${params.ENVIRONMENT} (build \${BUILD_NUMBER})"
+                            git push https://\${GIT_USER}:\${GIT_TOKEN}@github.com/HyperScale-Fitness-Platform/gym-platform-gitops.git main
                         fi
-                    done
-        
-                    git config user.email "jenkins@gym-platform.com"
-                    git config user.name "Jenkins CI"
-        
-                    git add services/auth-service/overlays/${params.ENVIRONMENT}/kustomization.yaml
-                    git add services/api-gateway/overlays/${params.ENVIRONMENT}/kustomization.yaml
-        
-                    if git diff --cached --quiet; then
-                        echo "No changes to commit — kustomization files already up to date."
-                    else
-                        git commit -m "Resolve account/region for ${params.ENVIRONMENT} (build \${BUILD_NUMBER})"
-                        git push origin main
-                    fi
-                """
+                    """
+                }
             }
         }
 

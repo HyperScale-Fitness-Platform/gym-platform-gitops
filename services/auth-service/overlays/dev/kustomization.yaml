@@ -11,8 +11,6 @@ namespace: gym-dev
 # Substitute placeholder base image with actual AWS ECR repository path
 images:
   - name: gym-auth-service
-    newName: 325614625863.dkr.ecr.us-east-1.amazonaws.com/gym-auth-service
-    newTag: latest
 
 # Environment-specific deployment overrides
 patches:

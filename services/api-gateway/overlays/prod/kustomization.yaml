@@ -8,8 +8,6 @@ namespace: gym-prod
 
 images:
   - name: gym-api-gateway
-    newName: <account-id>.dkr.ecr.<region>.amazonaws.com/gym-api-gateway
-    newTag: v1.0.0
 
 patches:
   - path: patch-deployment.yaml

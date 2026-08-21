@@ -1,11 +1,16 @@
 pipeline {
     agent any
 
+    options {
+        disableConcurrentBuilds()
+    }
+
+
     parameters {
         choice(
             name: 'ENVIRONMENT',
             choices: ['dev', 'prod'],
-            description: 'Which overlay/environment to deploy'
+            description: 'Target environment overlay to deploy'
         )
         booleanParam(
             name: 'SKIP_BUILD',
@@ -24,16 +29,56 @@ pipeline {
         AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
         AWS_DEFAULT_REGION    = 'us-east-1'
 
-        CLUSTER_NAME = "gym-cluster"
-        NAMESPACE    = "gym-${params.ENVIRONMENT}"
-        ARGOCD_NS    = "argocd"
-        ROOT_APP     = "gym-platform-root-${params.ENVIRONMENT}"
+        CLUSTER_NAME          = "gym-cluster"
+        NAMESPACE             = "gym-${params.ENVIRONMENT}"
+        ARGOCD_NS             = "argocd"
+        ROOT_APP              = "gym-platform-root-${params.ENVIRONMENT}"
     }
 
     stages {
         stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Bootstrap CLI Tools') {
+            steps {
+                sh '''
+                    set -e
+                    TOOL_BIN="${WORKSPACE}/.tools/bin"
+                    mkdir -p "${TOOL_BIN}"
+
+                    # 1. Install AWS CLI v2 if missing
+                    if ! command -v aws >/dev/null 2>&1; then
+                        echo "Installing AWS CLI v2..."
+                        curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
+                        unzip -q -o /tmp/awscliv2.zip -d /tmp/
+                        /tmp/aws/install --install-dir "${WORKSPACE}/.tools/aws-cli" --bin-dir "${TOOL_BIN}" --update
+                        rm -rf /tmp/aws /tmp/awscliv2.zip
+                    fi
+
+                    # 2. Install kubectl if missing
+                    if ! command -v kubectl >/dev/null 2>&1; then
+                        echo "Installing kubectl..."
+                        curl -sLO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                        chmod +x kubectl
+                        mv kubectl "${TOOL_BIN}/"
+                    fi
+
+                    # 3. Install envsubst if missing
+                    if ! command -v envsubst >/dev/null 2>&1; then
+                        echo "Installing envsubst..."
+                        curl -sL https://github.com/a8m/envsubst/releases/download/v1.2.0/envsubst-`uname -s`-`uname -m` -o "${TOOL_BIN}/envsubst"
+                        chmod +x "${TOOL_BIN}/envsubst"
+                    fi
+
+                    # Verification (avoid -v on Go binary)
+                    echo "--- Tool Versions & Checks ---"
+                    aws --version
+                    kubectl version --client
+                    echo "envsubst available at: $(which envsubst)"
+                '''
             }
         }
 
@@ -73,67 +118,72 @@ pipeline {
             }
         }
 
-       stage('Generate Env File') {
+        stage('Resolve AWS Account Identity') {
             steps {
                 script {
-                    env.RESOLVED_ACCOUNT_ID = sh(script: "aws sts get-caller-identity --query Account --output text", returnStdout: true).trim()
-                    env.RESOLVED_REGION = "${AWS_DEFAULT_REGION}"
-                    echo "Resolved ACCOUNT_ID=${env.RESOLVED_ACCOUNT_ID}, REGION=${env.RESOLVED_REGION}"
+                    env.RESOLVED_ACCOUNT_ID = sh(
+                        script: "aws sts get-caller-identity --query Account --output text", 
+                        returnStdout: true
+                    ).trim()
+                    echo "Resolved AWS Account: ${env.RESOLVED_ACCOUNT_ID} in ${AWS_DEFAULT_REGION}"
                 }
             }
         }
 
-        stage('Resolve Kustomization Templates & Push to GitHub') {
+        stage('Bootstrap ArgoCD & Inject Dynamic Overrides') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'github-creds', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                script {
+                    def ecrRegistry = "${env.RESOLVED_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+                    
                     sh """
-                        set -e
+                        # 1. Apply Project and Root Application
+                        kubectl apply -f argocd/projects/gym-project.yaml -n ${ARGOCD_NS}
+                        kubectl apply -f argocd/root-apps/root-app-${params.ENVIRONMENT}.yaml -n ${ARGOCD_NS}
 
-                        git checkout -B main origin/main
-
-                        for svc in auth-service api-gateway; do
-                            TEMPLATE_PATH="services/\$svc/overlays/${params.ENVIRONMENT}/kustomization.yaml.template"
-                            OUTPUT_PATH="services/\$svc/overlays/${params.ENVIRONMENT}/kustomization.yaml"
-
-                            if [ -f "\$TEMPLATE_PATH" ]; then
-                                echo "Rendering \$TEMPLATE_PATH -> \$OUTPUT_PATH"
-                                sed \
-                                    -e "s|__ACCOUNT_ID__|${env.RESOLVED_ACCOUNT_ID}|g" \
-                                    -e "s|__REGION__|${env.RESOLVED_REGION}|g" \
-                                    "\$TEMPLATE_PATH" > "\$OUTPUT_PATH"
-                            else
-                                echo "ERROR: \$TEMPLATE_PATH not found — cannot resolve image reference"
-                                exit 1
-                            fi
+                        # 2. Wait for Child Applications to be generated
+                        echo "Waiting for child applications to initialize..."
+                        until kubectl get application auth-service-${params.ENVIRONMENT} -n ${ARGOCD_NS} >/dev/null 2>&1; do
+                            sleep 3
+                        done
+                        until kubectl get application api-gateway-${params.ENVIRONMENT} -n ${ARGOCD_NS} >/dev/null 2>&1; do
+                            sleep 3
                         done
 
-                        git config user.email "jenkins@gym-platform.com"
-                        git config user.name "Jenkins CI"
+                        # 3. Patch Kustomize Image Overrides (No Git commits required)
+                        kubectl patch application auth-service-${params.ENVIRONMENT} -n ${ARGOCD_NS} --type merge -p '{
+                            "spec": {
+                                "source": {
+                                    "kustomize": {
+                                        "images": [
+                                            "gym-auth-service=${ecrRegistry}/gym-auth-service:latest"
+                                        ]
+                                    }
+                                }
+                            }
+                        }'
 
-                        git add services/auth-service/overlays/${params.ENVIRONMENT}/kustomization.yaml
-                        git add services/api-gateway/overlays/${params.ENVIRONMENT}/kustomization.yaml
+                        kubectl patch application api-gateway-${params.ENVIRONMENT} -n ${ARGOCD_NS} --type merge -p '{
+                            "spec": {
+                                "source": {
+                                    "kustomize": {
+                                        "images": [
+                                            "gym-api-gateway=${ecrRegistry}/gym-api-gateway:latest"
+                                        ]
+                                    }
+                                }
+                            }
+                        }'
 
-                        if git diff --cached --quiet; then
-                            echo "No changes to commit — kustomization files already up to date."
-                        else
-                            git commit -m "Resolve account/region for ${params.ENVIRONMENT} (build \${BUILD_NUMBER})"
-                            git push https://\${GIT_USER}:\${GIT_TOKEN}@github.com/HyperScale-Fitness-Platform/gym-platform-gitops.git main
-                        fi
-                    """
-                }
-            }
-        }
+                        # 4. Inject Dynamic Annotations for Argo CD Image Updater
+                        kubectl annotate application auth-service-${params.ENVIRONMENT} -n ${ARGOCD_NS} --overwrite \\
+                            argocd-image-updater.argoproj.io/image-list="authsvc=${ecrRegistry}/gym-auth-service" \\
+                            argocd-image-updater.argoproj.io/authsvc.update-strategy="digest" \\
+                            argocd-image-updater.argoproj.io/write-back-method="argocd"
 
-        stage('Bootstrap ArgoCD App of Apps') {
-            steps {
-                script {
-                    echo "Ensuring AppProject and Root Application exist..."
-                    sh """
-                        # 1. Apply the Project definition
-                        kubectl apply -f argocd/projects/gym-project.yaml -n ${ARGOCD_NS}
-
-                        # 2. Apply the Environment Root App (Dev or Prod)
-                        kubectl apply -f argocd/root-apps/root-app-${params.ENVIRONMENT}.yaml -n ${ARGOCD_NS}
+                        kubectl annotate application api-gateway-${params.ENVIRONMENT} -n ${ARGOCD_NS} --overwrite \\
+                            argocd-image-updater.argoproj.io/image-list="apisvc=${ecrRegistry}/gym-api-gateway" \\
+                            argocd-image-updater.argoproj.io/apisvc.update-strategy="digest" \\
+                            argocd-image-updater.argoproj.io/write-back-method="argocd"
                     """
                 }
             }
@@ -145,21 +195,18 @@ pipeline {
             }
             steps {
                 script {
-                    echo "Waiting for Argo CD to discover and sync all services in ${params.ENVIRONMENT}..."
-        
+                    echo "Reconciling root and child applications for ${params.ENVIRONMENT}..."
+
                     sh """
-                        # Trigger hard refresh on Root App
+                        # Trigger refresh on Root App
                         kubectl patch application ${ROOT_APP} -n ${ARGOCD_NS} --type merge -p '{"operation":{"sync":{"prune":true}}}' || true
-        
-                        echo "=== Waiting for Root Application (${ROOT_APP}) to be Healthy ==="
+
+                        echo "=== Waiting for Root Application (${ROOT_APP}) to become Healthy ==="
                         kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/${ROOT_APP} -n ${ARGOCD_NS} --timeout=180s
-        
-                        echo "=== Waiting for Child Applications to be Synced & Healthy ==="
-                        
-                        # POSIX-compliant loop (works with /bin/sh)
+
+                        echo "=== Waiting for Child Applications to Sync & Become Healthy ==="
                         for app in auth-service-${params.ENVIRONMENT} api-gateway-${params.ENVIRONMENT}; do
-                            echo "Waiting for \$app to sync and become Healthy..."
-                            
+                            echo "Checking status for \$app..."
                             kubectl wait --for=jsonpath='{.status.sync.status}'=Synced application/\$app -n ${ARGOCD_NS} --timeout=180s || true
                             kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/\$app -n ${ARGOCD_NS} --timeout=300s
                         done
@@ -171,20 +218,18 @@ pipeline {
         stage('Retrieve ArgoCD Credentials & Access Info') {
             steps {
                 script {
-                    echo "=== Fetching Argo CD Admin Credentials ==="
                     sh """
-                        # Fetch and decode initial admin password
                         ADMIN_PASS=\$(kubectl -n ${ARGOCD_NS} get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d || echo "Password not in initial secret (may have been changed)")
 
                         echo "========================================================="
                         echo "  Argo CD UI Access Details                              "
                         echo "========================================================="
-                        echo "  URL:       https://localhost:8080"
+                        echo "  URL:       https://localhost:8081"
                         echo "  Username:  admin"
                         echo "  Password:  \${ADMIN_PASS}"
                         echo ""
                         echo "  To access locally, run on your machine:"
-                        echo "    kubectl port-forward svc/argocd-server -n ${ARGOCD_NS} 8080:443"
+                        echo "    kubectl port-forward svc/argocd-server -n ${ARGOCD_NS} 8081:443"
                         echo "========================================================="
                     """
                 }
@@ -194,7 +239,7 @@ pipeline {
         stage('Full System Smoke Test') {
             steps {
                 script {
-                    echo "Waiting for Ingress ALB hostname..."
+                    echo "Waiting for Ingress ALB endpoint..."
                     def albAddress = ""
                     timeout(time: 3, unit: 'MINUTES') {
                         waitUntil {
@@ -213,7 +258,7 @@ pipeline {
                         curl -sf -X POST http://${albAddress}/auth/register \
                           -H "Content-Type: application/json" \
                           -d '{"email":"smoketest-${env.BUILD_NUMBER}@test.com","password":"secret123","role":"customer"}' \
-                          || echo "Registration smoke test completed with warning."
+                          || echo "Registration smoke test finished with warning."
                     """
                 }
             }
@@ -228,7 +273,7 @@ pipeline {
             echo "Full ${params.ENVIRONMENT} deployment and Argo CD sync succeeded!"
         }
         failure {
-            echo "Deployment to ${params.ENVIRONMENT} failed — check which stage above stopped the sequence."
+            echo "Deployment to ${params.ENVIRONMENT} failed. Check stage logs for details."
         }
     }
 }

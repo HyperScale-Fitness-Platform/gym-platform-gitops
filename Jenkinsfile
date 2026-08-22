@@ -50,36 +50,37 @@ pipeline {
                     set -e
                     TOOL_BIN="${WORKSPACE}/.tools/bin"
                     mkdir -p "${TOOL_BIN}"
+                    export PATH="${TOOL_BIN}:${PATH}"
 
                     # 1. Install AWS CLI v2 if missing
                     if ! command -v aws >/dev/null 2>&1; then
                         echo "Installing AWS CLI v2..."
-                        curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
+                        curl --retry 3 --retry-delay 2 -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
                         unzip -q -o /tmp/awscliv2.zip -d /tmp/
                         /tmp/aws/install --install-dir "${WORKSPACE}/.tools/aws-cli" --bin-dir "${TOOL_BIN}" --update
                         rm -rf /tmp/aws /tmp/awscliv2.zip
                     fi
 
-                    # 2. Install kubectl if missing
+                    # 2. Install kubectl if missing (pinned stable version with retries)
                     if ! command -v kubectl >/dev/null 2>&1; then
                         echo "Installing kubectl..."
-                        curl -sLO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-                        chmod +x kubectl
-                        mv kubectl "${TOOL_BIN}/"
+                        K8S_VER="v1.30.0"
+                        curl --retry 3 --retry-delay 2 -fsSL "https://dl.k8s.io/release/${K8S_VER}/bin/linux/amd64/kubectl" -o "${TOOL_BIN}/kubectl"
+                        chmod +x "${TOOL_BIN}/kubectl"
                     fi
 
                     # 3. Install envsubst if missing
                     if ! command -v envsubst >/dev/null 2>&1; then
                         echo "Installing envsubst..."
-                        curl -sL https://github.com/a8m/envsubst/releases/download/v1.2.0/envsubst-`uname -s`-`uname -m` -o "${TOOL_BIN}/envsubst"
+                        curl --retry 3 --retry-delay 2 -fsSL "https://github.com/a8m/envsubst/releases/download/v1.2.0/envsubst-Linux-x86_64" -o "${TOOL_BIN}/envsubst"
                         chmod +x "${TOOL_BIN}/envsubst"
                     fi
 
-                    # Verification (avoid -v on Go binary)
+                    # Verification
                     echo "--- Tool Versions & Checks ---"
                     aws --version
                     kubectl version --client
-                    echo "envsubst available at: $(which envsubst)"
+                    echo "envsubst available at: $(command -v envsubst)"
                 '''
             }
         }

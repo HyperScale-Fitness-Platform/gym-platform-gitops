@@ -33,6 +33,8 @@ pipeline {
         NAMESPACE             = "gym-${params.ENVIRONMENT}"
         ARGOCD_NS             = "argocd"
         ROOT_APP              = "gym-platform-root-${params.ENVIRONMENT}"
+
+        PATH                  = "${WORKSPACE}/.tools/bin:${env.PATH}"
     }
 
     stages {

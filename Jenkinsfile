@@ -95,7 +95,6 @@ pipeline {
             steps {
                 sh """
                     kubectl apply -f shared/${params.ENVIRONMENT}-namespace.yaml
-                    kubectl apply -f shared/cluster-secret-store.yaml || true
                     kubectl apply -f shared/kafka.yaml
                 """
             }
@@ -149,7 +148,7 @@ pipeline {
                             sleep 3
                         done
 
-                        # 3. Patch Kustomize Image Overrides (No Git commits required)
+                        # 3. Patch Kustomize Image Overrides
                         kubectl patch application auth-service-${params.ENVIRONMENT} -n ${ARGOCD_NS} --type merge -p '{
                             "spec": {
                                 "source": {

@@ -88,7 +88,14 @@ pipeline {
             steps {
                 sh """
                     aws eks update-kubeconfig --region ${AWS_DEFAULT_REGION} --name ${CLUSTER_NAME}
-                    kubectl version --client
+
+                    env.AWS_ACCOUNT_ID = sh(
+                        script: "aws sts get-caller-identity --query Account --output text",
+                        returnStdout: true
+                    ).trim()
+                    
+                    env.ECR_REGISTRY = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+                    echo "Connected to EKS. Resolved AWS Account: ${env.AWS_ACCOUNT_ID} | ECR: ${env.ECR_REGISTRY}"
                 """
             }
         }
@@ -99,13 +106,10 @@ pipeline {
                     kubectl apply -f shared/${params.ENVIRONMENT}-namespace.yaml
                     kubectl apply -f shared/kafka.yaml
 
-                    env.AWS_ACCOUNT_ID = sh(
-                        script: "aws sts get-caller-identity --query Account --output text",
-                        returnStdout: true
-                    ).trim()
-                    
-                    env.ECR_REGISTRY = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
-                    echo "Connected to EKS. Resolved AWS Account: ${env.AWS_ACCOUNT_ID} | ECR: ${env.ECR_REGISTRY}"
+                    # Dynamically substitute ECR Registry and Environment into ImageUpdater CR
+                    export ECR_REGISTRY="${env.ECR_REGISTRY}"
+                    export ENVIRONMENT="${params.ENVIRONMENT}"
+                    envsubst < shared/image-updater.yaml | kubectl apply -f -
                 """
             }
         }

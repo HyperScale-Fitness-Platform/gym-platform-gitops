@@ -98,6 +98,14 @@ pipeline {
                 sh """
                     kubectl apply -f shared/${params.ENVIRONMENT}-namespace.yaml
                     kubectl apply -f shared/kafka.yaml
+
+                    env.AWS_ACCOUNT_ID = sh(
+                        script: "aws sts get-caller-identity --query Account --output text",
+                        returnStdout: true
+                    ).trim()
+                    
+                    env.ECR_REGISTRY = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+                    echo "Connected to EKS. Resolved AWS Account: ${env.AWS_ACCOUNT_ID} | ECR: ${env.ECR_REGISTRY}"
                 """
             }
         }
@@ -122,11 +130,7 @@ pipeline {
         stage('Resolve AWS Account Identity') {
             steps {
                 script {
-                    env.RESOLVED_ACCOUNT_ID = sh(
-                        script: "aws sts get-caller-identity --query Account --output text", 
-                        returnStdout: true
-                    ).trim()
-                    echo "Resolved AWS Account: ${env.RESOLVED_ACCOUNT_ID} in ${AWS_DEFAULT_REGION}"
+                    echo "Resolved AWS Account: ${env.AWS_ACCOUNT_ID} in ${AWS_DEFAULT_REGION}"
                 }
             }
         }
@@ -134,7 +138,7 @@ pipeline {
         stage('Bootstrap ArgoCD & Inject Dynamic Overrides') {
             steps {
                 script {
-                    def ecrRegistry = "${env.RESOLVED_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+                    def ecrRegistry = "${env.ECR_REGISTRY}"
                     
                     sh """
                         # 1. Apply Project and Root Application
@@ -174,17 +178,6 @@ pipeline {
                                 }
                             }
                         }'
-
-                        # 4. Inject Dynamic Annotations for Argo CD Image Updater
-                        kubectl annotate application auth-service-${params.ENVIRONMENT} -n ${ARGOCD_NS} --overwrite \\
-                            argocd-image-updater.argoproj.io/image-list="authsvc=${ecrRegistry}/gym-auth-service" \\
-                            argocd-image-updater.argoproj.io/authsvc.update-strategy="digest" \\
-                            argocd-image-updater.argoproj.io/write-back-method="argocd"
-
-                        kubectl annotate application api-gateway-${params.ENVIRONMENT} -n ${ARGOCD_NS} --overwrite \\
-                            argocd-image-updater.argoproj.io/image-list="apisvc=${ecrRegistry}/gym-api-gateway" \\
-                            argocd-image-updater.argoproj.io/apisvc.update-strategy="digest" \\
-                            argocd-image-updater.argoproj.io/write-back-method="argocd"
                     """
                 }
             }

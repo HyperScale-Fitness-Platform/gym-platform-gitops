@@ -1,0 +1,27 @@
+apiVersion: argocd-image-updater.argoproj.io/v1alpha1
+kind: ImageUpdater
+metadata:
+  name: gym-platform-updater
+  namespace: argocd
+spec:
+  writeBackConfig:
+    method: argocd
+  applicationRefs:
+    - namePattern: "auth-service-${ENVIRONMENT}"
+      images:
+        - alias: authsvc
+          imageName: "${ECR_REGISTRY}/gym-auth-service"
+          commonUpdateSettings:
+            updateStrategy: newest-build
+          manifestTargets:
+            kustomize:
+              name: "gym-auth-service"
+    - namePattern: "api-gateway-${ENVIRONMENT}"
+      images:
+        - alias: apisvc
+          imageName: "${ECR_REGISTRY}/gym-api-gateway"
+          commonUpdateSettings:
+            updateStrategy: newest-build
+          manifestTargets:
+            kustomize:
+              name: "gym-api-gateway"

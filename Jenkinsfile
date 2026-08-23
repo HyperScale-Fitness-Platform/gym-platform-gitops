@@ -84,10 +84,10 @@ pipeline {
             }
         }
         
-        stage('Authenticate to Cluster') {
+        stage('Authenticate to Cluster & Resolve Account') {
             steps {
-                sh """
-                    aws eks update-kubeconfig --region ${AWS_DEFAULT_REGION} --name ${CLUSTER_NAME}
+                script {
+                    sh "aws eks update-kubeconfig --region ${AWS_DEFAULT_REGION} --name ${CLUSTER_NAME}"
 
                     env.AWS_ACCOUNT_ID = sh(
                         script: "aws sts get-caller-identity --query Account --output text",
@@ -96,7 +96,7 @@ pipeline {
                     
                     env.ECR_REGISTRY = "${env.AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
                     echo "Connected to EKS. Resolved AWS Account: ${env.AWS_ACCOUNT_ID} | ECR: ${env.ECR_REGISTRY}"
-                """
+                }
             }
         }
 

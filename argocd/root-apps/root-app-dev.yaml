@@ -9,10 +9,10 @@ spec:
     repoURL: https://github.com/HyperScale-Fitness-Platform/gym-platform-gitops.git
     targetRevision: main
     path: services
-    path: services
     directory:
       recurse: true
       include: "{*/*dev.yaml,*dev.yaml,**/application-dev.yaml}"
+      exclude: "operations-service/**"
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd

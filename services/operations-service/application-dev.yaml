@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: operations-service-dev
+  namespace: argocd
+spec:
+  project: gym-platform
+  source:
+    repoURL: https://github.com/HyperScale-Fitness-Platform/gym-platform-gitops.git
+    targetRevision: main
+    path: services/operations-service/overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gym-dev
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }

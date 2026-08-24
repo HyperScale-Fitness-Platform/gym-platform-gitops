@@ -8,11 +8,11 @@ spec:
     method: git
     gitConfig:
       branch: main
-      writeBackTarget: kustomization
-      secretRef:
-        name: git-creds
   applicationRefs:
     - namePattern: "auth-service-${ENVIRONMENT}"
+      writeBackConfig:
+        gitConfig:
+          writeBackTarget: "kustomization:./services/auth-service/overlays/${ENVIRONMENT}"
       images:
         - alias: authsvc
           imageName: "${ECR_REGISTRY}/gym-auth-service"
@@ -22,6 +22,9 @@ spec:
             kustomize:
               name: "gym-auth-service"
     - namePattern: "api-gateway-${ENVIRONMENT}"
+      writeBackConfig:
+        gitConfig:
+          writeBackTarget: "kustomization:./services/api-gateway/overlays/${ENVIRONMENT}"
       images:
         - alias: apisvc
           imageName: "${ECR_REGISTRY}/gym-api-gateway"

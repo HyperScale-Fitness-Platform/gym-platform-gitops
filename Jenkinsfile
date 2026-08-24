@@ -5,7 +5,6 @@ pipeline {
         disableConcurrentBuilds()
     }
 
-
     parameters {
         choice(
             name: 'ENVIRONMENT',
@@ -51,7 +50,6 @@ pipeline {
                     TOOL_BIN="${WORKSPACE}/.tools/bin"
                     mkdir -p "${TOOL_BIN}"
 
-                    # 1. Install AWS CLI v2 if missing
                     if ! command -v aws >/dev/null 2>&1; then
                         echo "Installing AWS CLI v2..."
                         curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
@@ -60,7 +58,6 @@ pipeline {
                         rm -rf /tmp/aws /tmp/awscliv2.zip
                     fi
 
-                    # 2. Install kubectl if missing
                     if ! command -v kubectl >/dev/null 2>&1; then
                         echo "Installing kubectl..."
                         curl -sLO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
@@ -68,14 +65,12 @@ pipeline {
                         mv kubectl "${TOOL_BIN}/"
                     fi
 
-                    # 3. Install envsubst if missing
                     if ! command -v envsubst >/dev/null 2>&1; then
                         echo "Installing envsubst..."
                         curl -sL https://github.com/a8m/envsubst/releases/download/v1.2.0/envsubst-`uname -s`-`uname -m` -o "${TOOL_BIN}/envsubst"
                         chmod +x "${TOOL_BIN}/envsubst"
                     fi
 
-                    # Verification (avoid -v on Go binary)
                     echo "--- Tool Versions & Checks ---"
                     aws --version
                     kubectl version --client
@@ -131,59 +126,13 @@ pipeline {
             }
         }
 
-        stage('Resolve AWS Account Identity') {
+        stage('Bootstrap ArgoCD Apps') {
             steps {
-                script {
-                    echo "Resolved AWS Account: ${env.AWS_ACCOUNT_ID} in ${AWS_DEFAULT_REGION}"
-                }
-            }
-        }
-
-        stage('Bootstrap ArgoCD & Inject Dynamic Overrides') {
-            steps {
-                script {
-                    def ecrRegistry = "${env.ECR_REGISTRY}"
-                    
-                    sh """
-                        # 1. Apply Project and Root Application
-                        kubectl apply -f argocd/projects/gym-project.yaml -n ${ARGOCD_NS}
-                        kubectl apply -f argocd/root-apps/root-app-${params.ENVIRONMENT}.yaml -n ${ARGOCD_NS}
-
-                        # 2. Wait for Child Applications to be generated
-                        echo "Waiting for child applications to initialize..."
-                        until kubectl get application auth-service-${params.ENVIRONMENT} -n ${ARGOCD_NS} >/dev/null 2>&1; do
-                            sleep 3
-                        done
-                        until kubectl get application api-gateway-${params.ENVIRONMENT} -n ${ARGOCD_NS} >/dev/null 2>&1; do
-                            sleep 3
-                        done
-
-                        # 3. Patch Kustomize Image Overrides
-                        kubectl patch application auth-service-${params.ENVIRONMENT} -n ${ARGOCD_NS} --type merge -p '{
-                            "spec": {
-                                "source": {
-                                    "kustomize": {
-                                        "images": [
-                                            "gym-auth-service=${ecrRegistry}/gym-auth-service:latest"
-                                        ]
-                                    }
-                                }
-                            }
-                        }'
-
-                        kubectl patch application api-gateway-${params.ENVIRONMENT} -n ${ARGOCD_NS} --type merge -p '{
-                            "spec": {
-                                "source": {
-                                    "kustomize": {
-                                        "images": [
-                                            "gym-api-gateway=${ecrRegistry}/gym-api-gateway:latest"
-                                        ]
-                                    }
-                                }
-                            }
-                        }'
-                    """
-                }
+                sh """
+                    # 1. Apply Project and Root Application
+                    kubectl apply -f argocd/projects/gym-project.yaml -n ${ARGOCD_NS}
+                    kubectl apply -f argocd/root-apps/root-app-${params.ENVIRONMENT}.yaml -n ${ARGOCD_NS}
+                """
             }
         }
 
@@ -192,24 +141,20 @@ pipeline {
                 expression { params.SYNC_ARGOCD == true }
             }
             steps {
-                script {
-                    echo "Reconciling root and child applications for ${params.ENVIRONMENT}..."
+                sh """
+                    # Trigger refresh on Root App
+                    kubectl patch application ${ROOT_APP} -n ${ARGOCD_NS} --type merge -p '{"operation":{"sync":{"prune":true}}}' || true
 
-                    sh """
-                        # Trigger refresh on Root App
-                        kubectl patch application ${ROOT_APP} -n ${ARGOCD_NS} --type merge -p '{"operation":{"sync":{"prune":true}}}' || true
+                    echo "=== Waiting for Root Application (${ROOT_APP}) to become Healthy ==="
+                    kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/${ROOT_APP} -n ${ARGOCD_NS} --timeout=180s
 
-                        echo "=== Waiting for Root Application (${ROOT_APP}) to become Healthy ==="
-                        kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/${ROOT_APP} -n ${ARGOCD_NS} --timeout=180s
-
-                        echo "=== Waiting for Child Applications to Sync & Become Healthy ==="
-                        for app in auth-service-${params.ENVIRONMENT} api-gateway-${params.ENVIRONMENT}; do
-                            echo "Checking status for \$app..."
-                            kubectl wait --for=jsonpath='{.status.sync.status}'=Synced application/\$app -n ${ARGOCD_NS} --timeout=180s || true
-                            kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/\$app -n ${ARGOCD_NS} --timeout=300s
-                        done
-                    """
-                }
+                    echo "=== Waiting for Child Applications to Sync & Become Healthy ==="
+                    for app in auth-service-${params.ENVIRONMENT} api-gateway-${params.ENVIRONMENT}; do
+                        echo "Checking status for \$app..."
+                        kubectl wait --for=jsonpath='{.status.sync.status}'=Synced application/\$app -n ${ARGOCD_NS} --timeout=180s || true
+                        kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/\$app -n ${ARGOCD_NS} --timeout=300s
+                    done
+                """
             }
         }
 
@@ -268,10 +213,10 @@ pipeline {
             cleanWs()
         }
         success {
-            echo "Full ${params.ENVIRONMENT} deployment and Argo CD sync succeeded!"
+            echo "✅ Full ${params.ENVIRONMENT} deployment and Git write-back flow active!"
         }
         failure {
-            echo "Deployment to ${params.ENVIRONMENT} failed. Check stage logs for details."
+            echo "❌ Deployment to ${params.ENVIRONMENT} failed. Check stage logs for details."
         }
     }
 }

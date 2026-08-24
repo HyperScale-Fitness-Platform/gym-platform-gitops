@@ -5,7 +5,12 @@ metadata:
   namespace: argocd
 spec:
   writeBackConfig:
-    method: argocd
+    method: git
+    gitConfig:
+      branch: main
+      writeBackTarget: kustomization
+      secretRef:
+        name: git-creds
   applicationRefs:
     - namePattern: "auth-service-${ENVIRONMENT}"
       images:

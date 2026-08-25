@@ -14,6 +14,7 @@ spec:
       labels:
         app: api-gateway
     spec:
+      serviceAccountName: api-gateway
       containers:
         - name: api-gateway
           # Use placeholder image string; Kustomize images transformer overrides this in overlays

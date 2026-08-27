@@ -5,7 +5,7 @@ metadata:
 data:
   PORT: "8080"
   AWS_REGION: "us-east-1"
-  PRODUCT_IMAGES_BUCKET: "gym-platform-product-images"
+  PRODUCT_IMAGES_BUCKET: "gym-platform-product-images-stg"
   AUTH_SERVICE_URL: "http://auth-service:4000"
   OPERATIONS_SERVICE_URL: "http://operations-service:4001"
   # profile-service (formerly "people-service"); real Service name is gym-profile-service

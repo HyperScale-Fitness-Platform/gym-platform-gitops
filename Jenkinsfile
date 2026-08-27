@@ -32,6 +32,7 @@ pipeline {
         NAMESPACE             = "gym-${params.ENVIRONMENT}"
         ARGOCD_NS             = "argocd"
         ROOT_APP              = "gym-platform-root-${params.ENVIRONMENT}"
+        DUCKDNS_DOMAIN        = "iti-gym-platform"
 
         PATH                  = "${WORKSPACE}/.tools/bin:${env.PATH}"
     }
@@ -101,7 +102,6 @@ pipeline {
                     kubectl apply -f shared/${params.ENVIRONMENT}-namespace.yaml
                     kubectl apply -f shared/kafka.yaml
 
-                    # Dynamically substitute ECR Registry and Environment into ImageUpdater CR
                     export ECR_REGISTRY="${env.ECR_REGISTRY}"
                     export ENVIRONMENT="${params.ENVIRONMENT}"
                     envsubst < shared/image-updater.yaml | kubectl apply -f -
@@ -129,9 +129,65 @@ pipeline {
         stage('Bootstrap ArgoCD Apps') {
             steps {
                 sh """
-                    # 1. Apply Project and Root Application
                     kubectl apply -f argocd/projects/gym-project.yaml -n ${ARGOCD_NS}
                     kubectl apply -f argocd/root-apps/root-app-${params.ENVIRONMENT}.yaml -n ${ARGOCD_NS}
+                """
+            }
+        }
+
+        stage('Sync TLS Certificate to AWS ACM') {
+            steps {
+                sh """
+                    echo "Waiting for TLS certificate secret 'api-gateway-tls' in ${NAMESPACE}..."
+                    until kubectl get secret api-gateway-tls -n ${NAMESPACE} >/dev/null 2>&1; do
+                        echo "Waiting for cert-manager to generate api-gateway-tls..."
+                        sleep 5
+                    done
+
+                    # 1. Extract secret
+                    kubectl get secret api-gateway-tls -n ${NAMESPACE} -o jsonpath="{.data['tls\\\\.crt']}" | base64 -d > /tmp/fullchain.crt
+                    kubectl get secret api-gateway-tls -n ${NAMESPACE} -o jsonpath="{.data['tls\\\\.key']}" | base64 -d > /tmp/tls.key
+
+                    # 2. Extract leaf certificate
+                    awk '/-----BEGIN CERTIFICATE-----/{flag=1; count++} count==1{print} /-----END CERTIFICATE-----/{flag=0; if(count==1) exit}' /tmp/fullchain.crt > /tmp/leaf.crt
+
+                    # 3. Extract CA chain
+                    awk '/-----BEGIN CERTIFICATE-----/{count++} count>1{print}' /tmp/fullchain.crt > /tmp/chain.crt
+
+                    # 4. Check for existing ACM certificate or import new
+                    EXISTING_ARN=\$(aws acm list-certificates --region ${AWS_DEFAULT_REGION} \
+                      --query "CertificateSummaryList[?DomainName=='${DUCKDNS_DOMAIN}.duckdns.org'].CertificateArn | [0]" \
+                      --output text)
+
+                    if [ "\${EXISTING_ARN}" != "None" ] && [ -n "\${EXISTING_ARN}" ]; then
+                        echo "Updating existing ACM Certificate: \${EXISTING_ARN}"
+                        CERT_ARN=\$(aws acm import-certificate \
+                          --certificate-arn "\${EXISTING_ARN}" \
+                          --certificate fileb:///tmp/leaf.crt \
+                          --certificate-chain fileb:///tmp/chain.crt \
+                          --private-key fileb:///tmp/tls.key \
+                          --region ${AWS_DEFAULT_REGION} \
+                          --query "CertificateArn" \
+                          --output text)
+                    else
+                        echo "Importing new ACM Certificate..."
+                        CERT_ARN=\$(aws acm import-certificate \
+                          --certificate fileb:///tmp/leaf.crt \
+                          --certificate-chain fileb:///tmp/chain.crt \
+                          --private-key fileb:///tmp/tls.key \
+                          --region ${AWS_DEFAULT_REGION} \
+                          --query "CertificateArn" \
+                          --output text)
+                    fi
+
+                    echo "Successfully configured ACM ARN: \${CERT_ARN}"
+
+                    # 5. Annotate Ingress with the valid ACM ARN
+                    kubectl annotate ingress api-gateway-ingress -n ${NAMESPACE} \
+                      alb.ingress.kubernetes.io/certificate-arn="\${CERT_ARN}" --overwrite
+
+                    # 6. Cleanup temporary files
+                    rm -f /tmp/fullchain.crt /tmp/leaf.crt /tmp/chain.crt /tmp/tls.key
                 """
             }
         }
@@ -179,30 +235,50 @@ pipeline {
             }
         }
 
-        stage('Full System Smoke Test') {
+        stage('Full System Smoke Test & DNS Sync') {
             steps {
                 script {
-                    echo "Waiting for Ingress ALB endpoint..."
-                    def albAddress = ""
-                    timeout(time: 3, unit: 'MINUTES') {
+                    echo "Waiting for Ingress ALB hostname..."
+                    def albHostname = ""
+                    timeout(time: 5, unit: 'MINUTES') {
                         waitUntil {
-                            albAddress = sh(
+                            albHostname = sh(
                                 script: "kubectl get ingress api-gateway-ingress -n ${NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true",
                                 returnStdout: true
                             ).trim()
-                            return (albAddress != null && albAddress != "")
+                            return (albHostname != null && albHostname != "")
                         }
                     }
 
-                    echo "ALB Endpoint: http://${albAddress}"
-                    sh "curl -sf http://${albAddress}/health || echo 'Health check warning'"
+                    echo "ALB Hostname: ${albHostname}"
 
-                    sh """
-                        curl -sf -X POST http://${albAddress}/auth/register \
-                          -H "Content-Type: application/json" \
-                          -d '{"email":"smoketest-${env.BUILD_NUMBER}@test.com","password":"secret123","role":"customer"}' \
-                          || echo "Registration smoke test finished with warning."
-                    """
+                    withCredentials([string(credentialsId: 'duckdns-token', variable: 'DUCKDNS_TOKEN')]) {
+                        sh """
+                            echo "Resolving ALB IP address..."
+                            ALB_IP=\$(getent hosts ${albHostname} | awk '{ print \$1 }' | head -n 1)
+
+                            if [ -z "\${ALB_IP}" ]; then
+                                echo "Primary lookup empty, trying Google DNS..."
+                                ALB_IP=\$(nslookup ${albHostname} 8.8.8.8 | grep -A1 'Name:' | grep 'Address:' | awk '{print \$2}' | head -n 1)
+                            fi
+
+                            echo "Resolved ALB IP: \${ALB_IP}"
+
+                            if [ -n "\${ALB_IP}" ]; then
+                                echo "Updating DuckDNS record for ${DUCKDNS_DOMAIN}..."
+                                UPDATE_RESP=\$(curl -s "https://www.duckdns.org/update?domains=${DUCKDNS_DOMAIN}&token=\${DUCKDNS_TOKEN}&ip=\${ALB_IP}")
+                                echo "DuckDNS Response: \${UPDATE_RESP}"
+                            else
+                                echo "WARNING: Could not resolve ALB IP. DuckDNS update skipped."
+                            fi
+                        """
+                    }
+
+                    echo "Testing ALB direct HTTP endpoint..."
+                    sh "curl -sf http://${albHostname}/health || echo 'Health check warning'"
+
+                    echo "Testing HTTPS Domain endpoint..."
+                    sh "curl -sf -k https://${DUCKDNS_DOMAIN}.duckdns.org/health || echo 'HTTPS Domain check warning'"
                 }
             }
         }
@@ -213,7 +289,7 @@ pipeline {
             cleanWs()
         }
         success {
-            echo "✅ Full ${params.ENVIRONMENT} deployment and Git write-back flow active!"
+            echo "✅ Full ${params.ENVIRONMENT} deployment, ACM sync, and DuckDNS update active!"
         }
         failure {
             echo "❌ Deployment to ${params.ENVIRONMENT} failed. Check stage logs for details."

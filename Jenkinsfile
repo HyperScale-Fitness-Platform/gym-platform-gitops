@@ -51,15 +51,10 @@ pipeline {
                     TOOL_BIN="${WORKSPACE}/.tools/bin"
                     mkdir -p "${TOOL_BIN}"
 
-                    if ! command -v unzip >/dev/null 2>&1; then
-                        echo "Installing unzip..."
-                        apt-get update -qq && apt-get install -y -qq unzip
-                    fi
-
                     if ! command -v aws >/dev/null 2>&1; then
                         echo "Installing AWS CLI v2..."
                         curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
-                        unzip -q -o /tmp/awscliv2.zip -d /tmp/
+                        python3 -c "import zipfile; zipfile.ZipFile('/tmp/awscliv2.zip').extractall('/tmp/')"
                         /tmp/aws/install --install-dir "${WORKSPACE}/.tools/aws-cli" --bin-dir "${TOOL_BIN}" --update
                         rm -rf /tmp/aws /tmp/awscliv2.zip
                     fi

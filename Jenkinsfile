@@ -117,16 +117,23 @@ pipeline {
             }
             steps {
                 script {
+                    // Jenkins job names for the buildable services. Each must
+                    // exist as a job, else this stage fails (run with
+                    // SKIP_BUILD=true to bypass). kafka-service is NOT here:
+                    // it is the upstream apache/kafka image, deployed straight
+                    // from services/kafka-service/ manifests by ArgoCD.
                     def services = [
-                        'kafka-service',
                         'gym-api-gateway',
                         'gym-auth-service',
                         'gym-profile-service',
+                        'gym-progress-service',
+                        'gym-catalog-service',
+                        'gym-order-service',
+                        'gym-payment-service',
+                        'gym-operations-service',
                         'gym-social-service',
                         'gym-ai-service',
-                        'frontend-service',
-                        'gym-progress-service',
-                        'gym-operations-service'
+                        'frontend-service'
                     ]
                     services.each { jobName ->
                         echo "Triggering ${jobName} for environment ${params.ENVIRONMENT}..."
@@ -222,9 +229,11 @@ pipeline {
 
                     echo "=== Waiting for Child Applications to Sync & Become Healthy ==="
                     for app in auth-service-${params.ENVIRONMENT} api-gateway-${params.ENVIRONMENT} \
-                               profile-service-${params.ENVIRONMENT} social-service-${params.ENVIRONMENT} \
-                               ai-service-${params.ENVIRONMENT} frontend-service-${params.ENVIRONMENT} \
-                               progress-service-${params.ENVIRONMENT} kafka-service-${params.ENVIRONMENT}; do
+                               profile-service-${params.ENVIRONMENT} progress-service-${params.ENVIRONMENT} \
+                               catalog-service-${params.ENVIRONMENT} order-service-${params.ENVIRONMENT} \
+                               payment-service-${params.ENVIRONMENT} operations-service-${params.ENVIRONMENT} \
+                               social-service-${params.ENVIRONMENT} ai-service-${params.ENVIRONMENT} \
+                               frontend-service-${params.ENVIRONMENT} kafka-service-${params.ENVIRONMENT}; do
                         echo "Checking status for \$app..."
                         kubectl wait --for=jsonpath='{.status.sync.status}'=Synced application/\$app -n ${ARGOCD_NS} --timeout=180s || true
                         kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/\$app -n ${ARGOCD_NS} --timeout=300s

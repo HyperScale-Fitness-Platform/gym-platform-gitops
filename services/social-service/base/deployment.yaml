@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: social-service
+  labels:
+    app: social-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: social-service
+  template:
+    metadata:
+      labels:
+        app: social-service
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16
+          command: ['sh', '-c', 'until pg_isready -h social-postgres -p 5432; do echo waiting for database; sleep 2; done;']
+        - name: wait-for-kafka
+          image: busybox:1.36.0
+          command: ['sh', '-c', 'until nc -z kafka 9092; do echo waiting for kafka; sleep 2; done;']
+      containers:
+        - name: social-service
+          image: gym-social-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4003
+          envFrom:
+            - configMapRef:
+                name: social-service-config
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: social-svc-credentials
+                  key: POSTGRES_PASSWORD
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4003
+            initialDelaySeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4003
+            initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"

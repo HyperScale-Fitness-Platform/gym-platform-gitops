@@ -6,7 +6,6 @@ resources:
 
 namespace: gym-dev
 
-# argocd-image-updater fills in newName/newTag under this entry.
 images:
   - name: gym-profile-service
 

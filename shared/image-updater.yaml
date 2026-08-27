@@ -45,6 +45,42 @@ spec:
           manifestTargets:
             kustomize:
               name: "gym-profile-service"
+    - namePattern: "social-service-${ENVIRONMENT}"
+      writeBackConfig:
+        gitConfig:
+          writeBackTarget: "kustomization:./services/social-service/overlays/${ENVIRONMENT}"
+      images:
+        - alias: socialsvc
+          imageName: "${ECR_REGISTRY}/gym-social-service"
+          commonUpdateSettings:
+            updateStrategy: newest-build
+          manifestTargets:
+            kustomize:
+              name: "gym-social-service"
+    - namePattern: "ai-service-${ENVIRONMENT}"
+      writeBackConfig:
+        gitConfig:
+          writeBackTarget: "kustomization:./services/ai-service/overlays/${ENVIRONMENT}"
+      images:
+        - alias: aisvc
+          imageName: "${ECR_REGISTRY}/gym-ai-service"
+          commonUpdateSettings:
+            updateStrategy: newest-build
+          manifestTargets:
+            kustomize:
+              name: "gym-ai-service"
+    - namePattern: "frontend-service-${ENVIRONMENT}"
+      writeBackConfig:
+        gitConfig:
+          writeBackTarget: "kustomization:./services/frontend-service/overlays/${ENVIRONMENT}"
+      images:
+        - alias: frontendsvc
+          imageName: "${ECR_REGISTRY}/frontend-service"
+          commonUpdateSettings:
+            updateStrategy: newest-build
+          manifestTargets:
+            kustomize:
+              name: "frontend-service"
     - namePattern: "progress-service-${ENVIRONMENT}"
       writeBackConfig:
         gitConfig:
@@ -57,30 +93,18 @@ spec:
           manifestTargets:
             kustomize:
               name: "gym-progress-service"
-    - namePattern: "catalog-service-${ENVIRONMENT}"
+    - namePattern: "operations-service-${ENVIRONMENT}"
       writeBackConfig:
         gitConfig:
-          writeBackTarget: "kustomization:./services/catalog-service/overlays/${ENVIRONMENT}"
+          writeBackTarget: "kustomization:./services/operations-service/overlays/${ENVIRONMENT}"
       images:
-        - alias: catalogsvc
-          imageName: "${ECR_REGISTRY}/gym-catalog-service"
+        - alias: operationssvc
+          imageName: "${ECR_REGISTRY}/gym-operations-service"
           commonUpdateSettings:
             updateStrategy: newest-build
           manifestTargets:
             kustomize:
-              name: "gym-catalog-service"
-    - namePattern: "order-service-${ENVIRONMENT}"
-      writeBackConfig:
-        gitConfig:
-          writeBackTarget: "kustomization:./services/order-service/overlays/${ENVIRONMENT}"
-      images:
-        - alias: ordersvc
-          imageName: "${ECR_REGISTRY}/gym-order-service"
-          commonUpdateSettings:
-            updateStrategy: newest-build
-          manifestTargets:
-            kustomize:
-              name: "gym-order-service"
+              name: "gym-operations-service"
     - namePattern: "payment-service-${ENVIRONMENT}"
       writeBackConfig:
         gitConfig:

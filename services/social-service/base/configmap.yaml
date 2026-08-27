@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: social-service-config
+data:
+  PORT: "4003"
+  DB_HOST: "social-postgres"
+  DB_PORT: "5432"
+  DB_NAME: "gym_social"
+  DB_USER: "postgres"
+  KAFKA_BROKERS: "kafka:9092"
+  KAFKAJS_NO_PARTITIONER_WARNING: "1"

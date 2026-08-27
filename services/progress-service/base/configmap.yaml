@@ -3,6 +3,7 @@ kind: ConfigMap
 metadata:
   name: progress-service-config
 data:
-  PORT: "3000"
+  PORT: "3001"
+  MONGO_URI: "mongodb://progress-mongo:27017/gym-progress"
   KAFKA_BROKERS: "kafka:9092"
-  KAFKAJS_NO_PARTITIONER_WARNING: "1"
+  OPERATIONS_SERVICE_URL: "http://operations-service:4001"

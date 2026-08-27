@@ -100,7 +100,6 @@ pipeline {
             steps {
                 sh """
                     kubectl apply -f shared/${params.ENVIRONMENT}-namespace.yaml
-                    kubectl apply -f shared/kafka.yaml
 
                     export ECR_REGISTRY="${env.ECR_REGISTRY}"
                     export ENVIRONMENT="${params.ENVIRONMENT}"
@@ -116,13 +115,15 @@ pipeline {
             steps {
                 script {
                     def services = [
-                        'gym-auth-svc-deployment',
-                        'gym-api-gateway-deployment',
-                        'gym-profile-svc-deployment',
-                        'gym-progress-svc-deployment',
-                        'gym-catalog-svc-deployment',
-                        'gym-order-svc-deployment',
-                        'gym-payment-svc-deployment',
+                        'gym-auth-service',
+                        'gym-api-gateway',
+                        'gym-profile-service',
+                        'gym-social-service',
+                        'gym-ai-service',
+                        'frontend-service',
+                        'gym-progress-service',
+                        'kafka-service',
+                        'gym-payment-service'
                     ]
                     services.each { jobName ->
                         echo "Triggering ${jobName} for environment ${params.ENVIRONMENT}..."
@@ -213,7 +214,11 @@ pipeline {
                     kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/${ROOT_APP} -n ${ARGOCD_NS} --timeout=180s
 
                     echo "=== Waiting for Child Applications to Sync & Become Healthy ==="
-                    for app in auth-service-${params.ENVIRONMENT} api-gateway-${params.ENVIRONMENT} profile-service-${params.ENVIRONMENT} progress-service-${params.ENVIRONMENT} catalog-service-${params.ENVIRONMENT} order-service-${params.ENVIRONMENT} payment-service-${params.ENVIRONMENT}; do
+                    for app in auth-service-${params.ENVIRONMENT} api-gateway-${params.ENVIRONMENT} \
+                               profile-service-${params.ENVIRONMENT} social-service-${params.ENVIRONMENT} \
+                               ai-service-${params.ENVIRONMENT} frontend-service-${params.ENVIRONMENT} \
+                               progress-service-${params.ENVIRONMENT} kafka-service-${params.ENVIRONMENT} \
+                               payment-service-${params.ENVIRONMENT}; do
                         echo "Checking status for \$app..."
                         kubectl wait --for=jsonpath='{.status.sync.status}'=Synced application/\$app -n ${ARGOCD_NS} --timeout=180s || true
                         kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/\$app -n ${ARGOCD_NS} --timeout=300s

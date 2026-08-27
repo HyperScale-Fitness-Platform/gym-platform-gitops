@@ -1,11 +1,7 @@
-# Headless service (clusterIP: None) gives the StatefulSet pod a stable DNS
-# name: profile-postgres-0.profile-postgres.<ns>.svc.cluster.local
 apiVersion: v1
 kind: Service
 metadata:
   name: profile-postgres
-  labels:
-    app: profile-postgres
 spec:
   clusterIP: None
   selector:
@@ -13,4 +9,3 @@ spec:
   ports:
     - port: 5432
       targetPort: 5432
-      name: postgres

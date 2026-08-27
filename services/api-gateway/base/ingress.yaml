@@ -8,7 +8,7 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
 
     # Connect to your ClusterIssuer
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+    cert-manager.io/cluster-issuer: letsencrypt-duckdns
 
     # Open HTTP (80) & HTTPS (443) listeners
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
@@ -18,10 +18,10 @@ metadata:
 spec:
   tls:
     - hosts:
-        - api.yourdomain.com          # Replace with your actual public domain
+        - iti-gym-platform.duckdns.org
       secretName: api-gateway-tls     # cert-manager will auto-create this secret
   rules:
-    - host: api.yourdomain.com        # Replace with your actual public domain
+    - host: iti-gym-platform.duckdns.org
       http:
         paths:
           - path: /

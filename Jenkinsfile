@@ -32,7 +32,7 @@ pipeline {
         NAMESPACE             = "gym-${params.ENVIRONMENT}"
         ARGOCD_NS             = "argocd"
         ROOT_APP              = "gym-platform-root-${params.ENVIRONMENT}"
-        DUCKDNS_DOMAIN        = credentials('duckdns-domain')
+        DUCKDNS_DOMAIN        = "iti-gym-platform"
 
         PATH                  = "${WORKSPACE}/.tools/bin:${env.PATH}"
     }
@@ -122,8 +122,7 @@ pipeline {
                         'gym-ai-service',
                         'frontend-service',
                         'gym-progress-service',
-                        'kafka-service',
-                        'gym-payment-service'
+                        'kafka-service'
                     ]
                     services.each { jobName ->
                         echo "Triggering ${jobName} for environment ${params.ENVIRONMENT}..."
@@ -217,8 +216,7 @@ pipeline {
                     for app in auth-service-${params.ENVIRONMENT} api-gateway-${params.ENVIRONMENT} \
                                profile-service-${params.ENVIRONMENT} social-service-${params.ENVIRONMENT} \
                                ai-service-${params.ENVIRONMENT} frontend-service-${params.ENVIRONMENT} \
-                               progress-service-${params.ENVIRONMENT} kafka-service-${params.ENVIRONMENT} \
-                               payment-service-${params.ENVIRONMENT}; do
+                               progress-service-${params.ENVIRONMENT} kafka-service-${params.ENVIRONMENT}; do
                         echo "Checking status for \$app..."
                         kubectl wait --for=jsonpath='{.status.sync.status}'=Synced application/\$app -n ${ARGOCD_NS} --timeout=180s || true
                         kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/\$app -n ${ARGOCD_NS} --timeout=300s

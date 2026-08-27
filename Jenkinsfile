@@ -51,6 +51,11 @@ pipeline {
                     TOOL_BIN="${WORKSPACE}/.tools/bin"
                     mkdir -p "${TOOL_BIN}"
 
+                    if ! command -v unzip >/dev/null 2>&1; then
+                        echo "Installing unzip..."
+                        apt-get update -qq && apt-get install -y -qq unzip
+                    fi
+
                     if ! command -v aws >/dev/null 2>&1; then
                         echo "Installing AWS CLI v2..."
                         curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
@@ -302,7 +307,7 @@ pipeline {
 
     post {
         always {
-            cleanWs()
+            deleteDir()
         }
         success {
             echo "✅ Full ${params.ENVIRONMENT} deployment, ACM sync, and DuckDNS update active!"

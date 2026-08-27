@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gym-catalog-service
+  labels:
+    app: gym-catalog-service
+spec:
+  type: ClusterIP
+  selector:
+    app: gym-catalog-service
+  ports:
+    - port: 4005
+      targetPort: 4005
+      protocol: TCP
+      name: http

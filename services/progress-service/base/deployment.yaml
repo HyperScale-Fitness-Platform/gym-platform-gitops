@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gym-progress-service
+  labels:
+    app: gym-progress-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gym-progress-service
+  template:
+    metadata:
+      labels:
+        app: gym-progress-service
+    spec:
+      initContainers:
+        - name: wait-for-mongo
+          image: busybox:1.35.0
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "until nc -z progress-mongo 27017; do echo waiting for progress-mongo; sleep 2; done;"]
+      containers:
+        - name: app
+          # Placeholder image; the overlay kustomize images transformer +
+          # argocd-image-updater rewrite this to the ECR repo digest/tag.
+          image: gym-progress-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: progress-service-config
+          env:
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: progress-svc-credentials
+                  key: MONGO_URI
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"

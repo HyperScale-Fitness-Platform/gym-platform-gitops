@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gym-order-service
+  labels:
+    app: gym-order-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gym-order-service
+  template:
+    metadata:
+      labels:
+        app: gym-order-service
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.35.0
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "until nc -z gym-order-postgres 5432; do echo waiting for gym-order-postgres:5432; sleep 2; done;"]
+      containers:
+        - name: app
+          # Placeholder image; the overlay kustomize images transformer +
+          # argocd-image-updater rewrite this to the ECR repo digest/tag.
+          image: gym-order-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3002
+              name: http
+          envFrom:
+            - configMapRef:
+                name: order-service-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: order-svc-credentials
+                  key: DATABASE_URL
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3002
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3002
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

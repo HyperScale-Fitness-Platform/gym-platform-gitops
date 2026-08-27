@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gym-catalog-service
+  labels:
+    app: gym-catalog-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gym-catalog-service
+  template:
+    metadata:
+      labels:
+        app: gym-catalog-service
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.35.0
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "until nc -z gym-catalog-postgres 5432; do echo waiting for gym-catalog-postgres:5432; sleep 2; done;"]
+      containers:
+        - name: app
+          # Placeholder image; the overlay kustomize images transformer +
+          # argocd-image-updater rewrite this to the ECR repo digest/tag.
+          image: gym-catalog-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4005
+              name: http
+          envFrom:
+            - configMapRef:
+                name: catalog-service-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: catalog-svc-credentials
+                  key: DATABASE_URL
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4005
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4005
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

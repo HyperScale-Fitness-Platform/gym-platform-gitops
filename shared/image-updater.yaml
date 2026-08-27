@@ -33,3 +33,51 @@ spec:
           manifestTargets:
             kustomize:
               name: "gym-api-gateway"
+    - namePattern: "profile-service-${ENVIRONMENT}"
+      writeBackConfig:
+        gitConfig:
+          writeBackTarget: "kustomization:./services/profile-service/overlays/${ENVIRONMENT}"
+      images:
+        - alias: profilesvc
+          imageName: "${ECR_REGISTRY}/gym-profile-service"
+          commonUpdateSettings:
+            updateStrategy: newest-build
+          manifestTargets:
+            kustomize:
+              name: "gym-profile-service"
+    - namePattern: "progress-service-${ENVIRONMENT}"
+      writeBackConfig:
+        gitConfig:
+          writeBackTarget: "kustomization:./services/progress-service/overlays/${ENVIRONMENT}"
+      images:
+        - alias: progresssvc
+          imageName: "${ECR_REGISTRY}/gym-progress-service"
+          commonUpdateSettings:
+            updateStrategy: newest-build
+          manifestTargets:
+            kustomize:
+              name: "gym-progress-service"
+    - namePattern: "catalog-service-${ENVIRONMENT}"
+      writeBackConfig:
+        gitConfig:
+          writeBackTarget: "kustomization:./services/catalog-service/overlays/${ENVIRONMENT}"
+      images:
+        - alias: catalogsvc
+          imageName: "${ECR_REGISTRY}/gym-catalog-service"
+          commonUpdateSettings:
+            updateStrategy: newest-build
+          manifestTargets:
+            kustomize:
+              name: "gym-catalog-service"
+    - namePattern: "order-service-${ENVIRONMENT}"
+      writeBackConfig:
+        gitConfig:
+          writeBackTarget: "kustomization:./services/order-service/overlays/${ENVIRONMENT}"
+      images:
+        - alias: ordersvc
+          imageName: "${ECR_REGISTRY}/gym-order-service"
+          commonUpdateSettings:
+            updateStrategy: newest-build
+          manifestTargets:
+            kustomize:
+              name: "gym-order-service"

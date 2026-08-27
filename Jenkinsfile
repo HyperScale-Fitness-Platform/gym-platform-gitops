@@ -249,21 +249,21 @@ pipeline {
                             return (albHostname != null && albHostname != "")
                         }
                     }
-
+        
                     echo "ALB Hostname: ${albHostname}"
-
+        
                     withCredentials([string(credentialsId: 'duckdns-token', variable: 'DUCKDNS_TOKEN')]) {
                         sh """
                             echo "Resolving ALB IP address..."
                             ALB_IP=\$(getent hosts ${albHostname} | awk '{ print \$1 }' | head -n 1)
-
+        
                             if [ -z "\${ALB_IP}" ]; then
                                 echo "Primary lookup empty, trying Google DNS..."
                                 ALB_IP=\$(nslookup ${albHostname} 8.8.8.8 | grep -A1 'Name:' | grep 'Address:' | awk '{print \$2}' | head -n 1)
                             fi
-
+        
                             echo "Resolved ALB IP: \${ALB_IP}"
-
+        
                             if [ -n "\${ALB_IP}" ]; then
                                 echo "Updating DuckDNS record for ${DUCKDNS_DOMAIN}..."
                                 UPDATE_RESP=\$(curl -s "https://www.duckdns.org/update?domains=${DUCKDNS_DOMAIN}&token=\${DUCKDNS_TOKEN}&ip=\${ALB_IP}")
@@ -273,12 +273,16 @@ pipeline {
                             fi
                         """
                     }
-
-                    echo "Testing ALB direct HTTP endpoint..."
-                    sh "curl -sf http://${albHostname}/health || echo 'Health check warning'"
-
-                    echo "Testing HTTPS Domain endpoint..."
-                    sh "curl -sf -k https://${DUCKDNS_DOMAIN}.duckdns.org/health || echo 'HTTPS Domain check warning'"
+        
+                    echo "Testing HTTPS Health endpoint..."
+                    sh "curl -sf https://${DUCKDNS_DOMAIN}.duckdns.org/health"
+        
+                    echo "Testing Auth Registration endpoint..."
+                    sh """
+                        curl -sf -X POST https://${DUCKDNS_DOMAIN}.duckdns.org/auth/register \
+                          -H "Content-Type: application/json" \
+                          -d '{"email":"smoketest-${env.BUILD_NUMBER}@test.com","password":"secret123","role":"customer"}'
+                    """
                 }
             }
         }

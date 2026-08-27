@@ -1,0 +1,16 @@
+# Headless service for the Mongo StatefulSet: stable DNS
+# progress-mongo-0.progress-mongo.<ns>.svc.cluster.local
+apiVersion: v1
+kind: Service
+metadata:
+  name: progress-mongo
+  labels:
+    app: progress-mongo
+spec:
+  clusterIP: None
+  selector:
+    app: progress-mongo
+  ports:
+    - port: 27017
+      targetPort: 27017
+      name: mongo

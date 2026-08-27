@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: order-service-config
+data:
+  PORT: "3002"
+  PGSSLMODE: "disable"
+  KAFKA_BROKERS: "kafka:9092"
+  KAFKAJS_NO_PARTITIONER_WARNING: "1"
+  CATALOG_SERVICE_URL: "http://gym-catalog-service:4005"
+  PAYMENT_SERVICE_URL: "http://payment-service:4006"

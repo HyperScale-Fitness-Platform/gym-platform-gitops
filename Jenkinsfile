@@ -115,7 +115,14 @@ pipeline {
             }
             steps {
                 script {
-                    def services = ['gym-auth-svc-deployment', 'gym-api-gateway-deployment']
+                    def services = [
+                        'gym-auth-svc-deployment',
+                        'gym-api-gateway-deployment',
+                        'gym-profile-svc-deployment',
+                        'gym-progress-svc-deployment',
+                        'gym-catalog-svc-deployment',
+                        'gym-order-svc-deployment',
+                    ]
                     services.each { jobName ->
                         echo "Triggering ${jobName} for environment ${params.ENVIRONMENT}..."
                         build job: jobName,
@@ -205,7 +212,7 @@ pipeline {
                     kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/${ROOT_APP} -n ${ARGOCD_NS} --timeout=180s
 
                     echo "=== Waiting for Child Applications to Sync & Become Healthy ==="
-                    for app in auth-service-${params.ENVIRONMENT} api-gateway-${params.ENVIRONMENT}; do
+                    for app in auth-service-${params.ENVIRONMENT} api-gateway-${params.ENVIRONMENT} profile-service-${params.ENVIRONMENT} progress-service-${params.ENVIRONMENT} catalog-service-${params.ENVIRONMENT} order-service-${params.ENVIRONMENT}; do
                         echo "Checking status for \$app..."
                         kubectl wait --for=jsonpath='{.status.sync.status}'=Synced application/\$app -n ${ARGOCD_NS} --timeout=180s || true
                         kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/\$app -n ${ARGOCD_NS} --timeout=300s

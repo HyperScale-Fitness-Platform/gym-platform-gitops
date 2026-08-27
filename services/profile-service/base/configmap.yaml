@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: profile-service-config
+data:
+  PORT: "4002"
+  PGSSLMODE: "disable"
+  KAFKA_BROKERS: "kafka:9092"
+  KAFKAJS_NO_PARTITIONER_WARNING: "1"

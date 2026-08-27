@@ -1,0 +1,19 @@
+# Headless service (clusterIP: None) for the StatefulSet: stable per-pod DNS
+# gym-catalog-postgres-0.gym-catalog-postgres.<ns>.svc.cluster.local
+apiVersion: v1
+kind: Service
+metadata:
+  name: gym-catalog-postgres
+  labels:
+    app: gym-catalog-postgres
+    component: database
+spec:
+  clusterIP: None
+  selector:
+    app: gym-catalog-postgres
+    component: database
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: postgres

@@ -115,14 +115,15 @@ pipeline {
             steps {
                 script {
                     def services = [
-                        'gym-auth-service',
+                        'kafka-service'
                         'gym-api-gateway',
+                        'gym-auth-service',
                         'gym-profile-service',
                         'gym-social-service',
                         'gym-ai-service',
                         'frontend-service',
                         'gym-progress-service',
-                        'kafka-service'
+                        'gym-operations-service'
                     ]
                     services.each { jobName ->
                         echo "Triggering ${jobName} for environment ${params.ENVIRONMENT}..."

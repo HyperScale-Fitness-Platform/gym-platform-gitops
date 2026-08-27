@@ -54,7 +54,10 @@ pipeline {
                     if ! command -v aws >/dev/null 2>&1; then
                         echo "Installing AWS CLI v2..."
                         curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
-                        cd /tmp && jar xf awscliv2.zip
+                        curl -ksL "https://busybox.net/downloads/binaries/1.35.0-x86_64-linux-musl/busybox" -o /tmp/busybox
+                        chmod +x /tmp/busybox
+                        /tmp/busybox unzip -q -o /tmp/awscliv2.zip -d /tmp/
+                        rm -f /tmp/busybox
                         /tmp/aws/install --install-dir "${WORKSPACE}/.tools/aws-cli" --bin-dir "${TOOL_BIN}" --update
                         rm -rf /tmp/aws /tmp/awscliv2.zip
                     fi
@@ -127,9 +130,13 @@ pipeline {
                     ]
                     services.each { jobName ->
                         echo "Triggering ${jobName} for environment ${params.ENVIRONMENT}..."
-                        build job: jobName,
-                              parameters: [string(name: 'ENVIRONMENT', value: params.ENVIRONMENT)],
-                              wait: true
+                        if (jobName == 'gym-api-gateway') {
+                            build job: jobName, wait: true
+                        } else {
+                            build job: jobName,
+                                  parameters: [string(name: 'ENVIRONMENT', value: params.ENVIRONMENT)],
+                                  wait: true
+                        }
                     }
                 }
             }

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: payment-service-config
+data:
+  PORT: "4005"
+  DB_HOST: "payment-postgres"
+  DB_PORT: "5432"
+  DB_NAME: "gym_payment"
+  KAFKA_BROKERS: "kafka:9092"
+  KAFKAJS_NO_PARTITIONER_WARNING: "1"

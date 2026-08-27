@@ -1,0 +1,16 @@
+# Headless service (clusterIP: None) for the StatefulSet: stable per-pod DNS
+# payment-postgres-0.payment-postgres.<ns>.svc.cluster.local
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-postgres
+  labels:
+    app: payment-postgres
+spec:
+  clusterIP: None
+  selector:
+    app: payment-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres

@@ -21,7 +21,7 @@ spec:
         - iti-gym-platform.duckdns.org
       secretName: api-gateway-tls     # cert-manager will auto-create this secret
   rules:
-    - host: iti-gym-platform.duckdns.org
+    - host: gym-platform.duckdns.org
       http:
         paths:
           - path: /

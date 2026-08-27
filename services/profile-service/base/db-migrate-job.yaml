@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: profile-db-migrate
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: postgres:16
+          env:
+            - name: PGHOST
+              value: "profile-postgres"
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: profile-svc-credentials
+                  key: POSTGRES_USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: profile-svc-credentials
+                  key: POSTGRES_PASSWORD
+            - name: PGDATABASE
+              value: "gym_profile"
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "Ensuring target database 'gym_profile' exists..."
+              psql -d postgres -c "CREATE DATABASE gym_profile;" 2>/dev/null || echo "Database gym_profile already exists."
+              echo "Applying schema migrations..."
+              psql -d gym_profile -f /migrations/schema.sql
+          volumeMounts:
+            - name: migration-sql
+              mountPath: /migrations
+      volumes:
+        - name: migration-sql
+          configMap:
+            name: profile-db-schema

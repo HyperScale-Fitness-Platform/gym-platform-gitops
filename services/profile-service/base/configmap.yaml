@@ -4,6 +4,9 @@ metadata:
   name: profile-service-config
 data:
   PORT: "4002"
+  DB_HOST: "profile-postgres"
+  DB_PORT: "5432"
+  DB_NAME: "gym_profile"
   PGSSLMODE: "disable"
   KAFKA_BROKERS: "kafka:9092"
   KAFKAJS_NO_PARTITIONER_WARNING: "1"

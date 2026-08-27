@@ -1,13 +1,13 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: gym-profile-service
+  name: profile-service
 spec:
   replicas: 1
   template:
     spec:
       containers:
-        - name: app
+        - name: profile-service
           resources:
-            requests: { cpu: "100m", memory: "256Mi" }
-            limits: { cpu: "500m", memory: "512Mi" }
+            requests: { cpu: "100m", memory: "128Mi" }
+            limits: { cpu: "250m", memory: "256Mi" }

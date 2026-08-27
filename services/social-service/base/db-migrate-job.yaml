@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: social-db-migrate
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: postgres:16
+          env:
+            - name: PGHOST
+              value: "social-postgres"
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: social-svc-credentials
+                  key: POSTGRES_USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: social-svc-credentials
+                  key: POSTGRES_PASSWORD
+            - name: PGDATABASE
+              value: "gym_social"
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "Ensuring target database 'gym_social' exists..."
+              psql -d postgres -c "CREATE DATABASE gym_social;" 2>/dev/null || echo "Database gym_social already exists."
+              echo "Applying schema migrations..."
+              psql -d gym_social -f /migrations/schema.sql
+          volumeMounts:
+            - name: migration-sql
+              mountPath: /migrations
+      volumes:
+        - name: migration-sql
+          configMap:
+            name: social-db-schema

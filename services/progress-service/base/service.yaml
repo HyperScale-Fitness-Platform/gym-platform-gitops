@@ -1,15 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: gym-progress-service
-  labels:
-    app: gym-progress-service
+  name: progress-service
 spec:
-  type: ClusterIP
   selector:
-    app: gym-progress-service
+    app: progress-service
   ports:
-    - port: 3000
-      targetPort: 3000
-      protocol: TCP
-      name: http
+    - port: 3001
+      targetPort: 3001
+  type: ClusterIP

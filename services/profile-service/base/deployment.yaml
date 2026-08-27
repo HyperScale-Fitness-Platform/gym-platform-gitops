@@ -1,62 +1,62 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: gym-profile-service
+  name: profile-service
   labels:
-    app: gym-profile-service
+    app: profile-service
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: gym-profile-service
+      app: profile-service
   template:
     metadata:
       labels:
-        app: gym-profile-service
+        app: profile-service
     spec:
       initContainers:
         - name: wait-for-postgres
-          image: busybox:1.35.0
-          imagePullPolicy: IfNotPresent
-          command: ["sh", "-c", "until nc -z profile-postgres 5432; do echo waiting for profile-postgres; sleep 2; done;"]
+          image: postgres:16
+          command: ['sh', '-c', 'until pg_isready -h profile-postgres -p 5432; do echo waiting for database; sleep 2; done;']
         - name: wait-for-kafka
-          image: busybox:1.35.0
-          imagePullPolicy: IfNotPresent
-          command: ["sh", "-c", "until nc -z kafka 9092; do echo waiting for kafka; sleep 2; done;"]
+          image: busybox:1.36.0
+          command: ['sh', '-c', 'until nc -z kafka 9092; do echo waiting for kafka; sleep 2; done;']
       containers:
-        - name: app
-          # Placeholder image; the overlay kustomize images transformer +
-          # argocd-image-updater rewrite this to the ECR repo digest/tag.
+        - name: profile-service
           image: gym-profile-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 4002
-              name: http
           envFrom:
             - configMapRef:
                 name: profile-service-config
           env:
-            - name: DATABASE_URL
+            - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
                   name: profile-svc-credentials
-                  key: DATABASE_URL
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: profile-svc-credentials
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@profile-postgres:5432/gym_profile"
           readinessProbe:
             httpGet:
               path: /health
               port: 4002
-            initialDelaySeconds: 5
-            periodSeconds: 10
+            initialDelaySeconds: 3
           livenessProbe:
             httpGet:
               path: /health
               port: 4002
-            initialDelaySeconds: 15
-            periodSeconds: 20
+            initialDelaySeconds: 5
           resources:
             requests:
               cpu: "100m"
-              memory: "256Mi"
+              memory: "128Mi"
             limits:
-              cpu: "500m"
-              memory: "512Mi"
+              cpu: "250m"
+              memory: "256Mi"

@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ai-db-migrate
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: postgres:16
+          env:
+            - name: PGHOST
+              value: "ai-postgres"
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: ai-svc-credentials
+                  key: POSTGRES_USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ai-svc-credentials
+                  key: POSTGRES_PASSWORD
+            - name: PGDATABASE
+              value: "gym_ai"
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "Ensuring target database 'gym_ai' exists..."
+              psql -d postgres -c "CREATE DATABASE gym_ai;" 2>/dev/null || echo "Database gym_ai already exists."
+              echo "Applying schema migrations..."
+              psql -d gym_ai -f /migrations/schema.sql
+          volumeMounts:
+            - name: migration-sql
+              mountPath: /migrations
+      volumes:
+        - name: migration-sql
+          configMap:
+            name: ai-db-schema

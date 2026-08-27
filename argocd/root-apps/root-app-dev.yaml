@@ -12,7 +12,6 @@ spec:
     directory:
       recurse: true
       include: "{*/*dev.yaml,*dev.yaml,**/application-dev.yaml}"
-      exclude: "operations-service/**"
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd

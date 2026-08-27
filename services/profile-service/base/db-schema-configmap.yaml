@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: profile-db-schema
+data:
+  schema.sql: |
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    CREATE TABLE IF NOT EXISTS profiles (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID UNIQUE NOT NULL,
+      full_name VARCHAR(255),
+      phone VARCHAR(20),
+      date_of_birth DATE,
+      gender VARCHAR(20),
+      height_cm DECIMAL(5,1),
+      weight_kg DECIMAL(5,1),
+      fitness_goal TEXT,
+      medical_conditions TEXT,
+      emergency_contact VARCHAR(255),
+      created_at TIMESTAMP NOT NULL DEFAULT now(),
+      updated_at TIMESTAMP NOT NULL DEFAULT now()
+    );

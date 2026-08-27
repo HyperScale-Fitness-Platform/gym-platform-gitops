@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-db-schema
+data:
+  schema.sql: |
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    CREATE TABLE IF NOT EXISTS customer_exercise_plans (
+        plan_id VARCHAR(100) PRIMARY KEY,
+        customer_id VARCHAR(100) NOT NULL,
+        payload JSONB NOT NULL,
+        start_date TIMESTAMPTZ,
+        end_date TIMESTAMPTZ,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_customer_exercise_plans_customer
+        ON customer_exercise_plans (customer_id, start_date DESC);
+
+    CREATE TABLE IF NOT EXISTS customer_nutrition_plans (
+        plan_id VARCHAR(100) PRIMARY KEY,
+        customer_id VARCHAR(100) NOT NULL,
+        payload JSONB NOT NULL,
+        start_date TIMESTAMPTZ,
+        end_date TIMESTAMPTZ,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_customer_nutrition_plans_customer
+        ON customer_nutrition_plans (customer_id, start_date DESC);
+
+    CREATE TABLE IF NOT EXISTS ai_generated_plans (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR(100) NOT NULL,
+        plan_type VARCHAR(50) NOT NULL,
+        content JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ai_generated_plans_user
+        ON ai_generated_plans (user_id, plan_type, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR(100) NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        last_draft_at TIMESTAMPTZ
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_messages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        session_id UUID NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+        role VARCHAR(20) NOT NULL,
+        content TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );

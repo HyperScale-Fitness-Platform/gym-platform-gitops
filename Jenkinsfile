@@ -32,7 +32,7 @@ pipeline {
         NAMESPACE             = "gym-${params.ENVIRONMENT}"
         ARGOCD_NS             = "argocd"
         ROOT_APP              = "gym-platform-root-${params.ENVIRONMENT}"
-        DUCKDNS_DOMAIN        = "iti-gym-platform"
+        DUCKDNS_DOMAIN        = credentials('duckdns-domain')
 
         PATH                  = "${WORKSPACE}/.tools/bin:${env.PATH}"
     }

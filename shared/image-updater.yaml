@@ -62,7 +62,7 @@ spec:
         gitConfig:
           writeBackTarget: "kustomization:./services/ai-service/overlays/${ENVIRONMENT}"
       images:
-        - alias:aisisvc
+        - alias: aisvc
           imageName: "${ECR_REGISTRY}/gym-ai-service"
           commonUpdateSettings:
             updateStrategy: newest-build
@@ -105,3 +105,15 @@ spec:
           manifestTargets:
             kustomize:
               name: "gym-operations-service"
+    - namePattern: "payment-service-${ENVIRONMENT}"
+      writeBackConfig:
+        gitConfig:
+          writeBackTarget: "kustomization:./services/payment-service/overlays/${ENVIRONMENT}"
+      images:
+        - alias: paymentsvc
+          imageName: "${ECR_REGISTRY}/gym-payment-service"
+          commonUpdateSettings:
+            updateStrategy: newest-build
+          manifestTargets:
+            kustomize:
+              name: "gym-payment-service"

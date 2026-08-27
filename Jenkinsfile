@@ -115,7 +115,7 @@ pipeline {
             steps {
                 script {
                     def services = [
-                        'kafka-service'
+                        'kafka-service',
                         'gym-api-gateway',
                         'gym-auth-service',
                         'gym-profile-service',

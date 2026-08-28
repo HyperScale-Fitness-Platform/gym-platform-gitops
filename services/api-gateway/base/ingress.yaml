@@ -15,6 +15,11 @@ metadata:
 
     # Redirect all HTTP requests to HTTPS automatically
     alb.ingress.kubernetes.io/ssl-redirect: '443'
+
+    # Two backends -> two target groups, each health-checked against its own
+    # pods. Both return 200 on /health (gateway: JSON; frontend: index.html
+    # via nginx try_files), whereas the gateway 404s on the default "/".
+    alb.ingress.kubernetes.io/healthcheck-path: /health
 spec:
   tls:
     - hosts:
@@ -24,10 +29,48 @@ spec:
     - host: iti-gym-platform.duckdns.org
       http:
         paths:
+          # --- API: exactly what the gateway proxies (see gym-api-gateway
+          #     src/config/routes.config.js) plus its own /health, /uploads ---
+          - path: /auth
+            pathType: Prefix
+            backend: { service: { name: api-gateway, port: { number: 8080 } } }
+          - path: /operations
+            pathType: Prefix
+            backend: { service: { name: api-gateway, port: { number: 8080 } } }
+          - path: /api
+            pathType: Prefix
+            backend: { service: { name: api-gateway, port: { number: 8080 } } }
+          - path: /progress
+            pathType: Prefix
+            backend: { service: { name: api-gateway, port: { number: 8080 } } }
+          - path: /social
+            pathType: Prefix
+            backend: { service: { name: api-gateway, port: { number: 8080 } } }
+          - path: /chat
+            pathType: Prefix
+            backend: { service: { name: api-gateway, port: { number: 8080 } } }
+          - path: /commerce
+            pathType: Prefix
+            backend: { service: { name: api-gateway, port: { number: 8080 } } }
+          - path: /orders
+            pathType: Prefix
+            backend: { service: { name: api-gateway, port: { number: 8080 } } }
+          - path: /payments
+            pathType: Prefix
+            backend: { service: { name: api-gateway, port: { number: 8080 } } }
+          - path: /webhooks
+            pathType: Prefix
+            backend: { service: { name: api-gateway, port: { number: 8080 } } }
+          - path: /ai
+            pathType: Prefix
+            backend: { service: { name: api-gateway, port: { number: 8080 } } }
+          - path: /uploads
+            pathType: Prefix
+            backend: { service: { name: api-gateway, port: { number: 8080 } } }
+          - path: /health
+            pathType: Prefix
+            backend: { service: { name: api-gateway, port: { number: 8080 } } }
+          # --- everything else: the React SPA ---
           - path: /
             pathType: Prefix
-            backend:
-              service:
-                name: api-gateway
-                port:
-                  number: 8080
+            backend: { service: { name: frontend-service, port: { number: 80 } } }

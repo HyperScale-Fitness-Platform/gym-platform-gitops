@@ -30,13 +30,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: progress-service-config
-          env:
-            - name: MONGO_URI
-              valueFrom:
-                secretKeyRef:
-                  name: progress-mongo-credentials
-                  key: MONGO_INITDB_ROOT_USERNAME
-                  optional: true
+          # MONGO_URI comes from progress-service-config (a full
+          # mongodb://... connection string). Do NOT override it here from
+          # a secret key that holds only the username -- that produced
+          # "MongoParseError: Invalid scheme".
           readinessProbe:
             httpGet:
               path: /health

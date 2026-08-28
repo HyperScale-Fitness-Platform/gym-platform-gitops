@@ -38,16 +38,26 @@ spec:
                 secretKeyRef:
                   name: operations-svc-credentials
                   key: POSTGRES_PASSWORD
+          # NestJS runs with global prefix /operations, so health is at
+          # /operations/health. Nest also takes ~30s to boot.
+          startupProbe:
+            httpGet:
+              path: /operations/health
+              port: 4001
+            failureThreshold: 30
+            periodSeconds: 5
           readinessProbe:
             httpGet:
-              path: /health
-              port: 4001
-            initialDelaySeconds: 3
-          livenessProbe:
-            httpGet:
-              path: /health
+              path: /operations/health
               port: 4001
             initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /operations/health
+              port: 4001
+            initialDelaySeconds: 30
+            periodSeconds: 15
           resources:
             requests:
               cpu: "100m"

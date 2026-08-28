@@ -7,7 +7,7 @@ spec:
   project: gym-platform
   source:
     repoURL: https://github.com/HyperScale-Fitness-Platform/gym-platform-gitops.git
-    targetRevision: main
+    targetRevision: env/staging
     path: services/progress-service/overlays/dev
   destination:
     server: https://kubernetes.default.svc

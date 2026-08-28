@@ -16,4 +16,4 @@ data:
   PAYMENT_SERVICE_URL: "http://payment-service:4005"
   # /commerce routes to catalog-service; real Service name is gym-catalog-service
   COMMERCE_SERVICE_URL: "http://gym-catalog-service:4005"
-  AI_SERVICE_URL: "http://ai-service:4007"
+  AI_SERVICE_URL: "http://ai-service:4006"

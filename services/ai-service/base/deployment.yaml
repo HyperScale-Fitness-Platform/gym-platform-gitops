@@ -31,6 +31,11 @@ spec:
             - configMapRef:
                 name: ai-service-config
           env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ai-svc-credentials
+                  key: POSTGRES_USER
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:

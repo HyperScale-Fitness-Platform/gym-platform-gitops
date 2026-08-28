@@ -7,7 +7,10 @@ data:
   DB_HOST: "ai-postgres"
   DB_PORT: "5432"
   DB_NAME: "gym_ai"
-  DB_USER: "postgres"
+  # DB_USER is injected from the ai-svc-credentials secret (POSTGRES_USER) in
+  # deployment.yaml so it always matches the role ai-postgres was initialised
+  # with. It was hardcoded to "postgres" here, which fails auth because the
+  # StatefulSet creates the "ai" role, not "postgres".
   KAFKA_BROKERS: "kafka:9092"
   KAFKAJS_NO_PARTITIONER_WARNING: "1"
   LLM_BASE_URL: "http://apiaccess.iti.net.eg/api/v1"

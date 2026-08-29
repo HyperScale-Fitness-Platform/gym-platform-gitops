@@ -13,5 +13,5 @@ data:
   # StatefulSet creates the "ai" role, not "postgres".
   KAFKA_BROKERS: "kafka:9092"
   KAFKAJS_NO_PARTITIONER_WARNING: "1"
-  LLM_BASE_URL: "http://apiaccess.iti.net.eg/api/v1"
-  LLM_MODEL_ID: "openai.gpt-oss-120b-1:0"
+  # GROQ_API_KEY and GROQ_MODEL are injected from the ai-svc-credentials
+  # secret (see deployment.yaml). ai-service calls api.groq.com via groq-sdk.

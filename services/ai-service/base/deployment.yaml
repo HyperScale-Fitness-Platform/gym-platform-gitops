@@ -41,12 +41,16 @@ spec:
                 secretKeyRef:
                   name: ai-svc-credentials
                   key: POSTGRES_PASSWORD
-            - name: SBG_API_KEY
+            - name: GROQ_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: ai-svc-credentials
-                  key: SBG_API_KEY
-                  optional: true
+                  key: GROQ_API_KEY
+            - name: GROQ_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: ai-svc-credentials
+                  key: GROQ_MODEL
           readinessProbe:
             httpGet:
               path: /health

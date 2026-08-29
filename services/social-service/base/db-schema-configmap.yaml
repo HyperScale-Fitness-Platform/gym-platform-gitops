@@ -48,10 +48,22 @@ data:
 
     CREATE TABLE IF NOT EXISTS chat_connections (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        customer_id UUID NOT NULL,
-        trainer_id UUID NOT NULL,
+        user_one_id UUID,
+        user_two_id UUID,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
+
+    -- chatConnection.model.js works on a sorted (user_one_id, user_two_id)
+    -- pair and relies on ON CONFLICT DO NOTHING, so it needs those columns
+    -- and a unique index on the pair. The original schema had
+    -- customer_id/trainer_id NOT NULL, which broke every insert
+    -- ("column user_one_id does not exist").
+    ALTER TABLE chat_connections ADD COLUMN IF NOT EXISTS user_one_id UUID;
+    ALTER TABLE chat_connections ADD COLUMN IF NOT EXISTS user_two_id UUID;
+    ALTER TABLE chat_connections DROP COLUMN IF EXISTS customer_id;
+    ALTER TABLE chat_connections DROP COLUMN IF EXISTS trainer_id;
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_chat_connections_users
+        ON chat_connections (user_one_id, user_two_id);
 
     CREATE TABLE IF NOT EXISTS messages (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

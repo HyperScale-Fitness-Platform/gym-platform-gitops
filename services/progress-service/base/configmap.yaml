@@ -4,6 +4,7 @@ metadata:
   name: progress-service-config
 data:
   PORT: "3001"
-  MONGO_URI: "mongodb://progress-mongo:27017/gym-progress"
+  # MONGO_URI is assembled in deployment.yaml with credentials from the
+  # progress-mongo-credentials secret (progress-mongo requires auth).
   KAFKA_BROKERS: "kafka:9092"
   OPERATIONS_SERVICE_URL: "http://operations-service:4001"

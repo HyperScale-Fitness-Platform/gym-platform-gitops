@@ -30,10 +30,24 @@ spec:
           envFrom:
             - configMapRef:
                 name: progress-service-config
-          # MONGO_URI comes from progress-service-config (a full
-          # mongodb://... connection string). Do NOT override it here from
-          # a secret key that holds only the username -- that produced
-          # "MongoParseError: Invalid scheme".
+          # progress-mongo runs with MONGO_INITDB_ROOT_USERNAME/PASSWORD, so
+          # the connection needs credentials (authSource=admin for the root
+          # user). Build the full MONGO_URI here via $(VAR) interpolation from
+          # the mongo credentials secret -- a ConfigMap can't reference a
+          # Secret, and the app only reads MONGO_URI.
+          env:
+            - name: MONGO_USER
+              valueFrom:
+                secretKeyRef:
+                  name: progress-mongo-credentials
+                  key: MONGO_INITDB_ROOT_USERNAME
+            - name: MONGO_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: progress-mongo-credentials
+                  key: MONGO_INITDB_ROOT_PASSWORD
+            - name: MONGO_URI
+              value: "mongodb://$(MONGO_USER):$(MONGO_PASS)@progress-mongo:27017/gym-progress?authSource=admin"
           readinessProbe:
             httpGet:
               path: /health

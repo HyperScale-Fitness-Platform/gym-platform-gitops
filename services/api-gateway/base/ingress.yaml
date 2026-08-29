@@ -70,6 +70,10 @@ spec:
           - path: /health
             pathType: Prefix
             backend: { service: { name: api-gateway, port: { number: 8080 } } }
+          # Socket.IO chat (handshake + WebSocket upgrade) -> gateway -> social-service
+          - path: /socket.io
+            pathType: Prefix
+            backend: { service: { name: api-gateway, port: { number: 8080 } } }
           # --- everything else: the React SPA ---
           - path: /
             pathType: Prefix

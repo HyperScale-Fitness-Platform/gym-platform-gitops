@@ -34,8 +34,17 @@ data:
         user_id UUID PRIMARY KEY,
         full_name VARCHAR(255),
         role VARCHAR(50),
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        photo_url VARCHAR(512),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
+
+    -- Backfill columns onto an already-created table. social.model.js selects
+    -- p.photo_url on every thread/comment query and customerProfile.model.js
+    -- upserts (full_name, photo_url) + updated_at; without these the
+    -- /community page fails with "column p.photo_url does not exist" (42703).
+    ALTER TABLE customer_profiles ADD COLUMN IF NOT EXISTS photo_url VARCHAR(512);
+    ALTER TABLE customer_profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
 
     CREATE TABLE IF NOT EXISTS chat_connections (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

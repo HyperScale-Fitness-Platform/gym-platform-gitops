@@ -55,3 +55,18 @@ data:
         content TEXT NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+    -- RAG equipment knowledge base. VECTOR(384) matches the
+    -- Xenova/all-MiniLM-L6-v2 embedding model used by embedding.service.js.
+    CREATE EXTENSION IF NOT EXISTS vector;
+
+    CREATE TABLE IF NOT EXISTS equipment_docs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title VARCHAR(255) NOT NULL,
+        content TEXT NOT NULL,
+        embedding VECTOR(384),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_equipment_docs_embedding
+        ON equipment_docs USING hnsw (embedding vector_cosine_ops);

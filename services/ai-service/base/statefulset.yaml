@@ -15,7 +15,10 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16
+          # pgvector/pgvector:pg16 == postgres:16 + the `vector` extension,
+          # needed by the RAG equipment_docs table. Same PGDATA layout, so
+          # the existing PVC data carries over unchanged.
+          image: pgvector/pgvector:pg16
           ports:
             - containerPort: 5432
           env:

@@ -8,9 +8,10 @@ data:
   PRODUCT_IMAGES_BUCKET: "gym-platform-product-images-stg"
   AUTH_SERVICE_URL: "http://auth-service:4000"
   OPERATIONS_SERVICE_URL: "http://operations-service:4001"
-  # profile-service (formerly "people-service"); real Service name is gym-profile-service
-  PEOPLE_SERVICE_URL: "http://gym-profile-service:4002"
-  PROGRESS_SERVICE_URL: "http://gym-progress-service:3000"
+  # /api/profiles -> profile-service (formerly "people-service"). The Service
+  # is named "profile-service" (no gym- prefix, unlike catalog/order).
+  PEOPLE_SERVICE_URL: "http://profile-service:4002"
+  PROGRESS_SERVICE_URL: "http://progress-service:3001"
   SOCIAL_SERVICE_URL: "http://social-service:4003"
   ORDER_SERVICE_URL: "http://gym-order-service:3002"
   PAYMENT_SERVICE_URL: "http://payment-service:4005"

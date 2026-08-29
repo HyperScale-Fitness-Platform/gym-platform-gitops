@@ -7,6 +7,9 @@ data:
   DB_HOST: "social-postgres"
   DB_PORT: "5432"
   DB_NAME: "gym_social"
-  DB_USER: "postgres"
+  # DB_USER is injected from the social-svc-credentials secret (POSTGRES_USER)
+  # in deployment.yaml so it matches the role social-postgres was initialised
+  # with. Hardcoding "postgres" fails auth (28P01) -- the StatefulSet creates
+  # the "social" role, not "postgres".
   KAFKA_BROKERS: "kafka:9092"
   KAFKAJS_NO_PARTITIONER_WARNING: "1"

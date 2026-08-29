@@ -31,6 +31,11 @@ spec:
             - configMapRef:
                 name: social-service-config
           env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: social-svc-credentials
+                  key: POSTGRES_USER
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
